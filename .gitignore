@@ -1,0 +1,26 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+Thumbs.db
+.env
+*.pkl
+*.joblib
+models/*.pkl
+
+# Large local extracts (keep sample/processed if committed later)
+data/raw/*.geojson
+data/raw/*.parquet
+data/processed/*.geojson
+data/processed/*.parquet
+cache/

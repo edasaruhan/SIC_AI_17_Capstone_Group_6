@@ -1,0 +1,11 @@
+pandas>=2.2
+geopandas>=1.0
+shapely>=2.0
+osmnx>=2.0
+scikit-learn>=1.5
+pydeck>=0.9
+streamlit>=1.40
+numpy>=2.0
+matplotlib>=3.9
+pyarrow>=17.0
+openpyxl>=3.1
