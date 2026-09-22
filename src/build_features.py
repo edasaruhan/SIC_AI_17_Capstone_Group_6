@@ -7,6 +7,7 @@ import pandas as pd
 
 from src import METRIC_CRS
 from src.allocate_population import attach_population
+from src.attach_streets import attach_street_names
 from src.collect_neighbourhoods import run as collect_mahalle
 from src.collect_osm_data import LAYER_FILES, RAW_DIR
 from src.create_grid import PROCESSED_DIR, build_grid
@@ -141,6 +142,8 @@ def build_features(grid: gpd.GeoDataFrame | None = None) -> gpd.GeoDataFrame:
 
     print("allocating population...")
     grid = attach_population(grid)
+    print("nearest named street...")
+    grid = attach_street_names(grid)
     return grid
 
 

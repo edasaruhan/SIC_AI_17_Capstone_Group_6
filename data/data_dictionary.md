@@ -70,4 +70,20 @@ Population is allocated as `pop_total × (cell∩mahalle area / mahalle area)`.
 | population_density | people / km² | Positive |
 | pop_15_34 | Empty until mahalle age data exists | — |
 | mahalle_name | Dominant overlapping mahalle | — |
+| street_name | Nearest named OSM walk way within 250 m (label only) | — |
 | population_source | `tuik_areal_weight_total_only` | — |
+
+## Suitability pillars (`src/scoring.py`)
+
+Default mix: demand 30%, access 25%, population 20%, complementary 15%, inverted saturation 10%. Stated prior, not fitted to profit. See README for rationale.
+
+| Column | Description |
+| --- | --- |
+| demand_score | 0–1 mix of universities, shops, diversity, parks, schools |
+| accessibility_score | 0–1 mix of bus stops, inverse metro distance, intersections |
+| population_score | Min–max population density |
+| complementary_score | Restaurants and shops |
+| saturation_ratio | `cafes_500m / (demand_proxy + 1)` |
+| saturation_score | `1 - minmax(saturation_ratio)` |
+| suitability_score | Weighted sum × 100 |
+

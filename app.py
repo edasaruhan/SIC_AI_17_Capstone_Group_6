@@ -1,23 +1,38 @@
-"""OSM backbone map: target businesses, demand generators, transport."""
+"""Explainable café location decision support for Çankaya."""
 
 from pathlib import Path
 
 import geopandas as gpd
+import pandas as pd
 import streamlit as st
 
+from src.attach_streets import attach_street_names
 from src.collect_osm_data import LAYER_FILES, RAW_DIR, run as collect_osm
+from src.scoring import (
+    DEFAULT_WEIGHTS,
+    PILLAR_LABELS,
+    WEIGHT_RATIONALE,
+    normalize_weights,
+    score_grid,
+    sensitivity_table,
+    top_cells,
+)
 from src.visualization import grid_deck, osm_deck
 
 st.set_page_config(page_title="Retail Location Intelligence", layout="wide")
 st.title("Retail Location Intelligence")
 st.caption(
-    "Çankaya, Ankara · OpenStreetMap omurgası: hedef işletmeler, talep üreticileri, ulaşım ağı"
+    "Çankaya kafe konum karar desteği · açıklanabilir 0–100 puan · kârlılık tahmini değil"
 )
 
 BOUNDARY_PATH = RAW_DIR / "cankaya_boundary.geojson"
 POIS_PATH = RAW_DIR / "cankaya_pois.geojson"
 WALK_PATH = RAW_DIR / "cankaya_walk_edges.parquet"
-GRID_PATH = RAW_DIR.parent / "processed" / "cankaya_grid_features.parquet"
+PROCESSED = RAW_DIR.parent / "processed"
+GRID_CANDIDATES = [
+    PROCESSED / "cankaya_grid_features.parquet",
+    PROCESSED / "cankaya_grid_features.geojson",
+]
 
 CATEGORY_FILE = {
     "cafe": LAYER_FILES["cafes"],
@@ -32,6 +47,23 @@ CATEGORY_FILE = {
     "road_intersection": "cankaya_road_intersections.geojson",
 }
 
+PILLAR_HELP = {
+    "demand_score": "Üniversite, mağaza, park, okul ve POI çeşitliliği (talep vekili).",
+    "accessibility_score": "Durak sayısı, metroya yakınlık, yol kesişimi.",
+    "population_score": "Mahalle nüfusunun hücreye alan payıyla dağıtımı.",
+    "complementary_score": "Yakın restoran ve mağazalar; kafeler burada sayılmaz.",
+    "saturation_score": "Kafe / (talep + 1) oranının tersi. Sıfır kafe otomatik avantaj değil.",
+}
+
+ALL_MAHALLE = "Tüm Çankaya"
+PILLAR_CHART_LABELS = {
+    "accessibility_score_100": "Toplu ulaşıma yakınlık",
+    "demand_score_100": "Potansiyel müşteri yoğunluğu",
+    "population_score_100": "Nüfus yoğunluğu",
+    "complementary_score_100": "Tamamlayıcı işletmeler",
+    "saturation_score_100": "Rakip doygunluğu (ters)",
+}
+
 
 @st.cache_data(show_spinner=False)
 def _read_file(path_str: str) -> gpd.GeoDataFrame:
@@ -43,35 +75,132 @@ def _read_file(path_str: str) -> gpd.GeoDataFrame:
     return gpd.read_file(path)
 
 
+@st.cache_data(show_spinner="Cadde adları ekleniyor…")
+def _with_streets(path_str: str, mtime: float) -> gpd.GeoDataFrame:
+    grid = _read_file(path_str)
+    if "street_name" in grid.columns and grid["street_name"].notna().any():
+        return grid
+    return attach_street_names(grid)
+
+
+@st.cache_data(show_spinner="Duyarlılık hesaplanıyor…")
+def _sensitivity(path_str: str, mtime: float) -> pd.DataFrame:
+    return sensitivity_table(_read_file(path_str))
+
+
+def _feature_grid_path() -> Path | None:
+    for path in GRID_CANDIDATES:
+        if path.exists():
+            return path
+    return None
+
+
+def _headline(cell: pd.Series) -> str:
+    mahalle = str(cell.get("mahalle_name") or "Hücre").strip()
+    street = str(cell.get("street_name") or "").strip()
+    cell_id = int(cell["cell_id"])
+    score = float(cell["suitability_score"])
+    if street:
+        return f"{mahalle}, {street} çevresi: {score:.0f}/100"
+    return f"{mahalle} (hücre {cell_id}): {score:.0f}/100"
+
+
+def _render_explanation(cell: pd.Series) -> None:
+    st.markdown(f"**{_headline(cell)}**")
+    pillars = pd.DataFrame(
+        {
+            "Bileşen": list(PILLAR_CHART_LABELS.values()),
+            "Puan": [float(cell[k]) for k in PILLAR_CHART_LABELS],
+        }
+    )
+    st.bar_chart(pillars.set_index("Bileşen"))
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Kafe (500 m)", int(cell.get("cafes_500m", 0)))
+    c2.metric("Durak (400 m)", int(cell.get("bus_stops_400m", 0)))
+    c3.metric("Park (500 m)", int(cell.get("parks_500m", 0)))
+    d1, d2, d3 = st.columns(3)
+    metro = cell.get("metro_distance")
+    d1.metric("Metro mesafesi", f"{metro:.0f} m" if pd.notna(metro) else "—")
+    d2.metric("Okul (750 m)", int(cell.get("schools_750m", 0)))
+    d3.metric("Üniversite (1 km)", int(cell.get("universities_1000m", 0)))
+    e1, e2, e3 = st.columns(3)
+    e1.metric("Restoran (500 m)", int(cell.get("restaurants_500m", 0)))
+    e2.metric("Mağaza (500 m)", int(cell.get("shops_500m", 0)))
+    pop = cell.get("population")
+    e3.metric("Hücre nüfus vekili", f"{pop:.0f}" if pd.notna(pop) else "—")
+    st.caption(
+        "Mevcut kafe sayısı başarı değildir. Doygunluk talep vekiline göredir; "
+        "boş hücre yüksek fırsat sayılmaz. Cadde adı yalnızca etiket (en yakın OSM yolu)."
+    )
+
+
 with st.sidebar:
     st.header("Kapsam")
     st.selectbox("İlçe", ["Çankaya"], disabled=True)
-    st.selectbox("İşletme türü", ["Kafe (hedef)"], disabled=True)
-    map_mode = st.radio("Harita", ["OSM noktaları", "300 m grid"], index=0)
+    st.selectbox("İşletme türü", ["Kafe"], disabled=True)
+    st.selectbox(
+        "Analiz ızgarası",
+        ["300 m hücre (sabit)"],
+        disabled=True,
+        help="POI yarıçapları özellikte sabit: durak 400 m, kafe/park/mağaza 500 m, okul 750 m, üniversite 1 km.",
+    )
+
+    map_mode = st.radio(
+        "Harita",
+        ["Uygunluk puanı", "OSM noktaları", "Ham grid özelliği"],
+        index=0,
+    )
+
+    st.subheader("Puan ağırlıkları")
+    st.caption("Varsayılan prior; kaydırınca 100’e oranlanır. Kârlılıktan öğrenilmedi.")
+    if st.button("Varsayılan ağırlıklara dön"):
+        for key, default in DEFAULT_WEIGHTS.items():
+            st.session_state[f"w_{key}"] = float(default)
+        st.rerun()
+    raw_weights = {}
+    for key, default in DEFAULT_WEIGHTS.items():
+        raw_weights[key] = st.slider(
+            PILLAR_LABELS[key],
+            min_value=0.0,
+            max_value=0.60,
+            value=float(default),
+            step=0.01,
+            help=PILLAR_HELP[key],
+            key=f"w_{key}",
+        )
+    weights = normalize_weights(raw_weights)
+    mix_df = pd.DataFrame(
+        {
+            "Bileşen": [PILLAR_LABELS[k] for k in DEFAULT_WEIGHTS],
+            "Pay %": [round(weights[k] * 100, 1) for k in DEFAULT_WEIGHTS],
+        }
+    )
+    st.dataframe(mix_df, hide_index=True, width="stretch")
+
+    min_score = st.slider("Minimum uygunluk", 0, 100, 0)
+
+    with st.expander("Bu ağırlıklar neden böyle?"):
+        st.markdown(WEIGHT_RATIONALE)
 
     with st.expander("TÜİK dosyası"):
         st.markdown(
             """
-Mahalle toplam nüfus yüklü: `data/raw/tuik/cankaya_mahalle_nufus.csv`
+Mahalle toplam nüfus: `data/raw/tuik/cankaya_mahalle_nufus.csv`
 
 `pop_15_34` yok; hücre nüfusu mahalle toplamının alana göre dağıtımı.
             """
         )
 
-    st.subheader("Hedef işletmeler")
-    show_cafe = st.checkbox("Kafeler (amenity=cafe)", value=True)
-    show_rest = st.checkbox("Restoran / fast food", value=True)
-
-    st.subheader("Talep üreticileri")
-    show_uni = st.checkbox("Üniversiteler", value=True)
-    show_school = st.checkbox("Okullar", value=True)
-    show_hosp = st.checkbox("Hastane / klinik", value=True)
-    show_park = st.checkbox("Parklar", value=True)
+    st.subheader("OSM katmanları")
+    show_cafe = st.checkbox("Kafeler", value=True)
+    show_rest = st.checkbox("Restoran / fast food", value=False)
+    show_uni = st.checkbox("Üniversiteler", value=False)
+    show_school = st.checkbox("Okullar", value=False)
+    show_hosp = st.checkbox("Hastane / klinik", value=False)
+    show_park = st.checkbox("Parklar", value=False)
     show_shop = st.checkbox("Alışveriş (shop=*)", value=False)
-
-    st.subheader("Ulaşım ağları")
-    show_bus = st.checkbox("Otobüs durakları", value=True)
-    show_metro = st.checkbox("Metro girişleri / istasyonlar", value=True)
+    show_bus = st.checkbox("Otobüs durakları", value=False)
+    show_metro = st.checkbox("Metro / istasyon", value=False)
     show_inter = st.checkbox("Yol kesişimleri", value=False)
     show_walk = st.checkbox("Yaya yolları (örneklem)", value=False)
 
@@ -79,10 +208,12 @@ Mahalle toplam nüfus yüklü: `data/raw/tuik/cankaya_mahalle_nufus.csv`
         with st.spinner("Overpass + yol ağı indiriliyor..."):
             collect_osm()
             _read_file.clear()
+            _with_streets.clear()
+            _sensitivity.clear()
         st.rerun()
 
-    grid_metric = "cafes_500m"
-    if map_mode == "300 m grid":
+    grid_metric = "suitability_score"
+    if map_mode == "Ham grid özelliği":
         grid_metric = st.selectbox(
             "Hücre rengi",
             [
@@ -123,61 +254,26 @@ if show_metro:
 if show_inter:
     visible.add("road_intersection")
 
-if not BOUNDARY_PATH.exists() or not POIS_PATH.exists():
+has_osm = BOUNDARY_PATH.exists() and POIS_PATH.exists()
+grid_path = _feature_grid_path()
+
+if map_mode == "OSM noktaları" and not has_osm:
     st.warning("Yerel OSM çıktısı yok. Kenar çubuğundan indirin veya `python -m src.collect_osm_data` çalıştırın.")
     st.stop()
 
-boundary = _read_file(str(BOUNDARY_PATH))
-layers = {key: _read_file(str(RAW_DIR / filename)) for key, filename in CATEGORY_FILE.items()}
-
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("Kafeler", len(layers["cafe"]))
-m2.metric("Restoran / FF", len(layers["restaurant"]))
-m3.metric("Duraklar", len(layers["bus_stop"]))
-m4.metric("Metro / istasyon", len(layers["metro"]))
-
-m5, m6, m7, m8 = st.columns(4)
-m5.metric("Üniversite", len(layers["university"]))
-m6.metric("Okul", len(layers["school"]))
-m7.metric("Park", len(layers["park"]))
-m8.metric("Mağaza", len(layers["shop"]))
-
-if map_mode == "300 m grid":
-    if not GRID_PATH.exists():
-        st.warning("Grid henüz yok. `python -m src.build_features` çalıştırın.")
-        st.stop()
-    grid = _read_file(str(GRID_PATH))
-    source = (
-        grid["population_source"].dropna().iloc[0]
-        if "population_source" in grid.columns and grid["population_source"].notna().any()
-        else "unknown"
-    )
-    st.caption(
-        f"{len(grid)} hücre · nüfus kaynağı: `{source}` · "
-        "15–34 yaş yoksa genç nüfus sütunu boş kalır."
-    )
-    st.pydeck_chart(grid_deck(grid, grid_metric), width="stretch")
-    preview_cols = list(
-        dict.fromkeys(
-            c
-            for c in [
-                "cell_id",
-                "mahalle_name",
-                grid_metric,
-                "cafes_500m",
-                "bus_stops_400m",
-                "metro_distance",
-                "population",
-            ]
-            if c in grid.columns
-        )
-    )
-    st.dataframe(
-        grid.drop(columns="geometry", errors="ignore")[preview_cols].head(25),
-        width="stretch",
-        hide_index=True,
-    )
+if has_osm:
+    layers = {key: _read_file(str(RAW_DIR / filename)) for key, filename in CATEGORY_FILE.items()}
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Kafeler", len(layers["cafe"]))
+    m2.metric("Restoran / FF", len(layers["restaurant"]))
+    m3.metric("Duraklar", len(layers["bus_stop"]))
+    m4.metric("Metro / istasyon", len(layers["metro"]))
 else:
+    layers = {}
+    st.info("OSM nokta katmanları yok; uygunluk haritası işlenmiş grid ile açılır.")
+
+if map_mode == "OSM noktaları":
+    boundary = _read_file(str(BOUNDARY_PATH))
     walk_edges = _read_file(str(WALK_PATH)) if show_walk and WALK_PATH.exists() else None
     st.pydeck_chart(
         osm_deck(
@@ -189,31 +285,173 @@ else:
         ),
         width="stretch",
     )
+else:
+    if grid_path is None:
+        st.warning("Grid henüz yok. `python -m src.build_features` çalıştırın.")
+        st.stop()
+
+    features = _with_streets(str(grid_path), grid_path.stat().st_mtime)
+    scored_all = score_grid(features, weights)
+    score_ceiling = float(scored_all["suitability_score"].max())
+
+    mahalle_names = sorted(
+        scored_all["mahalle_name"].dropna().astype(str).unique().tolist()
+    ) if "mahalle_name" in scored_all.columns else []
+
+    with st.sidebar:
+        st.subheader("Bölge")
+        mahalle = st.selectbox("Mahalle", [ALL_MAHALLE, *mahalle_names])
+
+    scored = scored_all.loc[scored_all["suitability_score"] >= min_score].copy()
+    if mahalle != ALL_MAHALLE:
+        scored = scored.loc[scored["mahalle_name"].astype(str) == mahalle].copy()
+
+    if scored.empty:
+        st.info("Filtreye uyan hücre yok. Mahalleyi veya minimum puanı değiştirin.")
+        st.stop()
+
+    ranked = top_cells(scored, 10)
+
+    with st.sidebar:
+        labels = []
+        ids = []
+        for _, row in scored.sort_values("suitability_score", ascending=False).head(200).iterrows():
+            ids.append(int(row["cell_id"]))
+            street = str(row.get("street_name") or "").strip()
+            extra = f" · {street}" if street else ""
+            labels.append(
+                f"{int(row['cell_id'])} · {row.get('mahalle_name', '')}{extra} · {row['suitability_score']:.0f}"
+            )
+        current = st.session_state.get("selected_cell_id")
+        if current is not None and current not in ids:
+            ids.insert(0, int(current))
+            labels.insert(0, f"{int(current)} · seçili hücre")
+        lookup = dict(zip(labels, ids))
+        default_idx = 0
+        if current in ids:
+            default_idx = ids.index(current)
+        chosen = st.selectbox("Hücre seç (puana göre, ilk 200)", labels, index=min(default_idx, len(labels) - 1))
+        st.session_state.selected_cell_id = lookup[chosen]
+        typed = st.text_input("veya hücre numarası yazın", value="")
+        if typed.strip().isdigit():
+            typed_id = int(typed.strip())
+            if typed_id in set(scored_all["cell_id"].astype(int)):
+                st.session_state.selected_cell_id = typed_id
+
+    selected_id = int(st.session_state.selected_cell_id)
+    if selected_id not in set(scored["cell_id"].astype(int)):
+        selected_id = int(ranked.iloc[0]["cell_id"])
+        st.session_state.selected_cell_id = selected_id
+
+    color_col = "suitability_score" if map_mode == "Uygunluk puanı" else grid_metric
+    invert = color_col == "metro_distance"
+    st.pydeck_chart(
+        grid_deck(scored, color_col, invert=invert, selected_cell_id=selected_id),
+        width="stretch",
+    )
+    st.caption(
+        f"{len(scored)} hücre gösteriliyor · tavan {score_ceiling:.0f}/100 "
+        "(teorik 100, tüm bileşenler aynı anda en yüksek olsa). "
+        "Sarı çerçeve seçilen hücre. PyDeck tıklaması Streamlit’e dönmez; mahalle/hücre kutusundan seçin. "
+        "Kızılay / Bahçelievler karışık kullanımla öne çıkar; kafe haritası boş ama nüfusu yüksek mahalleler "
+        "doygunlukta “açık” görünebilir."
+    )
+
+    left, right = st.columns((1.15, 1.0))
+    with left:
+        st.subheader("En uygun 10 hücre")
+        st.caption("Satır seçince sağdaki açıklama ve harita vurgusu güncellenir.")
+        display = ranked.rename(
+            columns={
+                "cell_id": "Hücre",
+                "mahalle_name": "Mahalle",
+                "street_name": "Cadde",
+                "suitability_score": "Puan",
+                "demand_score_100": "Talep",
+                "accessibility_score_100": "Ulaşım",
+                "population_score_100": "Nüfus",
+                "complementary_score_100": "Tamamlayıcı",
+                "saturation_score_100": "Fırsat",
+                "cafes_500m": "Kafe 500m",
+                "bus_stops_400m": "Durak 400m",
+            }
+        )
+        event = st.dataframe(
+            display,
+            width="stretch",
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
+            key="top10",
+        )
+        rows = event.selection.rows if event.selection else []
+        if rows:
+            new_id = int(ranked.iloc[rows[0]]["cell_id"])
+            if new_id != st.session_state.get("selected_cell_id"):
+                st.session_state.selected_cell_id = new_id
+                st.rerun()
+    with right:
+        st.subheader("Neden bu bölge?")
+        hit = scored_all.loc[scored_all["cell_id"] == selected_id]
+        if hit.empty:
+            st.info("Hücre bu filtrede yok.")
+        else:
+            _render_explanation(hit.iloc[0])
+
+    with st.expander("Ağırlık duyarlılığı (varsayılan prior, ±10 puan)"):
+        st.caption(
+            "Her bileşeni tek tek şişirip diğerlerini yeniden oranlıyoruz. "
+            "Spearman, tüm hücre sıralamasının ne kadar durduğunu; top-50 örtüşmesi önerilen listenin ne kadar kaydığını gösterir."
+        )
+        sens = _sensitivity(str(grid_path), grid_path.stat().st_mtime)
+        show = sens.copy()
+        show["pillar"] = show["pillar"].map(PILLAR_LABELS).fillna(show["pillar"])
+        show = show.rename(
+            columns={
+                "pillar": "Bileşen",
+                "shock": "Şok",
+                "top50_overlap": "İlk 50 örtüşme",
+                "spearman": "Spearman",
+            }
+        )
+        st.dataframe(show, hide_index=True, width="stretch")
+
+with st.expander("Bu çıktı neyi iddia etmez"):
+    st.markdown(
+        """
+Bu uygulama **veri temelli, açıklanabilir bir kafe konum karar destek sistemidir.**
+
+- Hücrede kafe olması o işletmenin başarılı olduğu anlamına gelmez.
+- Random Forest veya benzeri bir model **henüz yok**; eklenirse çıktı adı
+  **“mevcut kafe lokasyonlarına benzerlik”** olur, kârlılık değil.
+- Ciro, günlük müşteri, kira, kapanma tarihi yok.
+- Ağırlıklar bir **ön kabul**dür; kaydırabilirsiniz. Duyarlılık tablosu yukarıdadır.
+        """
+    )
 
 with st.expander("Katman renkleri ve OSM etiketleri"):
     st.markdown(
         """
 | Grup | OSM | Harita |
 | --- | --- | --- |
-| Hedef isletme | `amenity=cafe` | kirmizi |
-| Hedef isletme | `amenity=restaurant`, `fast_food` | turuncu |
+| Hedef işletme | `amenity=cafe` | kırmızı |
+| Hedef işletme | `amenity=restaurant`, `fast_food` | turuncu |
 | Talep | `amenity=university`, `school`, `hospital` | mor / mavi / pembe |
-| Talep | `leisure=park`, `shop=*` | yesil / sari |
-| Ulasim | `highway=bus_stop` | camgobegi |
-| Ulasim | `railway=subway_entrance` / `station` | koyu gri |
-| Ag | drive graph kesisim (`street_count >= 3`) | acik gri |
-| Ag | walk graph kenarlari | ince cizgi |
+| Talep | `leisure=park`, `shop=*` | yeşil / sarı |
+| Ulaşım | `highway=bus_stop` | camgöbeği |
+| Ulaşım | `railway=subway_entrance` / `station` | koyu gri |
         """
     )
 
 with st.expander("Sınırlılıklar"):
     st.markdown(
         """
-- Veri OpenStreetMap'ten gelir; eksik veya güncel olmayan kayıtlar olabilir.
-- Poligonlar (kampüs, park, hastane) centroid'e indirgenir.
-- Yol kesişimleri ve yaya ağı yoğun katmanlardır; varsayılan kapalı / örneklemli.
-- Nüfus: mahalle `pop_total` hücreye areal weighting ile dağıtılır. 15–34 yaş mahallede yok.
-- Sakarya Mahallesi tabloda boş; o hücrelerde nüfus 0 kalabilir.
-- Bu ekran henüz uygunluk puanı üretmez.
+- Talep OSM ve mahalle nüfus vekilidir; yaya sayımı yoktur.
+- 15–34 yaş mahallede yok.
+- Sakarya Mahallesi tabloda boş kalabilir.
+- OSM eksik olabilir. Poligonlar centroid’e indirgenir.
+- Analiz yarıçapı canlı değiştirilmez; özellikleri yeniden üretmek gerekir.
+- Şeffaf Ankara / ABB katmanı henüz yok; ulaşım OSM durak ve metroya dayanır.
+- İlk sürüm yalnızca Çankaya + kafe.
         """
     )

@@ -23,4 +23,9 @@ data/raw/*.geojson
 data/raw/*.parquet
 data/processed/*.geojson
 data/processed/*.parquet
+
+# Commit the compact feature matrix so the app can run without Overpass.
+!data/processed/cankaya_grid_features.parquet
+!data/raw/cankaya_boundary.geojson
+
 cache/

@@ -171,26 +171,78 @@ def _color_ramp(values: pd.Series) -> list[list[int]]:
     return colors
 
 
-def grid_deck(grid: gpd.GeoDataFrame, value_col: str) -> pdk.Deck:
+def _suitability_colors(values: pd.Series) -> list[list[int]]:
+    series = pd.to_numeric(values, errors="coerce").fillna(0).clip(0, 100)
+    colors = []
+    for score in series:
+        t = float(score) / 100.0
+        r = int(40 + 20 * (1 - t))
+        g = int(80 + 140 * t)
+        b = int(70 + 40 * (1 - t))
+        a = int(50 + 140 * t)
+        colors.append([r, g, b, a])
+    return colors
+
+
+def _view_for_cell(grid_wgs: gpd.GeoDataFrame, cell_id: int | None) -> pdk.ViewState:
+    if cell_id is None or grid_wgs.empty or "cell_id" not in grid_wgs.columns:
+        return CANKAYA_VIEW
+    hit = grid_wgs.loc[grid_wgs["cell_id"] == cell_id]
+    if hit.empty:
+        return CANKAYA_VIEW
+    centroid = hit.geometry.iloc[0].centroid
+    return pdk.ViewState(latitude=float(centroid.y), longitude=float(centroid.x), zoom=13.5, pitch=0)
+
+
+def grid_deck(
+    grid: gpd.GeoDataFrame,
+    value_col: str,
+    invert: bool = False,
+    selected_cell_id: int | None = None,
+) -> pdk.Deck:
     frame = grid.copy()
     if frame.crs is None:
         frame = frame.set_crs(WGS84_CRS)
     frame = frame.to_crs(WGS84_CRS)
     if value_col not in frame.columns:
         value_col = "cafes_500m"
-    colors = _color_ramp(frame[value_col])
+    series = pd.to_numeric(frame[value_col], errors="coerce")
+    if invert:
+        series = -series
+    if value_col == "suitability_score":
+        colors = _suitability_colors(frame[value_col])
+    else:
+        colors = _color_ramp(series)
     frame["r"] = [c[0] for c in colors]
     frame["g"] = [c[1] for c in colors]
     frame["b"] = [c[2] for c in colors]
     frame["a"] = [c[3] for c in colors]
     if "mahalle_name" not in frame.columns:
         frame["mahalle_name"] = ""
+    if "street_name" not in frame.columns:
+        frame["street_name"] = ""
+    frame["street_name"] = frame["street_name"].fillna("").astype(str)
     frame["tooltip"] = frame[value_col].map(lambda v: f"{value_col}: {v}")
-    keep = [
-        c
-        for c in ["cell_id", "mahalle_name", "tooltip", "r", "g", "b", "a", "geometry"]
-        if c in frame.columns
+    keep_cols = [
+        "cell_id",
+        "mahalle_name",
+        "street_name",
+        "tooltip",
+        "r",
+        "g",
+        "b",
+        "a",
+        "geometry",
+        "suitability_score",
+        "demand_score_100",
+        "accessibility_score_100",
+        "population_score_100",
+        "complementary_score_100",
+        "saturation_score_100",
+        "cafes_500m",
+        "bus_stops_400m",
     ]
+    keep = [c for c in keep_cols if c in frame.columns]
     layer = pdk.Layer(
         "GeoJsonLayer",
         data=frame[keep].__geo_interface__,
@@ -201,12 +253,32 @@ def grid_deck(grid: gpd.GeoDataFrame, value_col: str) -> pdk.Deck:
         pickable=True,
         auto_highlight=True,
     )
+    layers = [layer]
+    if selected_cell_id is not None:
+        picked = frame.loc[frame["cell_id"] == selected_cell_id, ["geometry"]]
+        if not picked.empty:
+            layers.append(
+                pdk.Layer(
+                    "GeoJsonLayer",
+                    data=picked.__geo_interface__,
+                    filled=False,
+                    stroked=True,
+                    get_line_color=[255, 215, 0, 255],
+                    get_line_width=80,
+                    line_width_min_pixels=3,
+                    pickable=False,
+                )
+            )
+    html = (
+        "<b>{mahalle_name}</b><br/>{street_name}<br/>Hücre {cell_id}<br/>{tooltip}"
+        "<br/>Uygunluk: {suitability_score}/100"
+        "<br/>Talep {demand_score_100} · Ulaşım {accessibility_score_100}"
+        "<br/>Nüfus {population_score_100} · Tamamlayıcı {complementary_score_100}"
+        "<br/>Fırsat {saturation_score_100}"
+    )
     return pdk.Deck(
-        initial_view_state=CANKAYA_VIEW,
-        layers=[layer],
-        tooltip={
-            "html": "<b>{mahalle_name}</b><br/>Hücre {cell_id}<br/>{tooltip}",
-            "style": {"color": "white"},
-        },
+        initial_view_state=_view_for_cell(frame, selected_cell_id),
+        layers=layers,
+        tooltip={"html": html, "style": {"color": "white"}},
         map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
     )
