@@ -68,6 +68,17 @@ def areal_weight_population(
     print(f"TUIK name matches: {matched}/{len(joined)} mahalle polygons")
     if len(missing):
         print("OSM mahalle without TUIK pop_total:", ", ".join(missing.astype(str)))
+        # Impute missing mahalles (e.g. Sakarya Mahallesi) using median density of matched mahalles
+        valid = joined["pop_total"].notna() & (joined["mahalle_area_m2"] > 0)
+        if valid.any():
+            median_density = (
+                joined.loc[valid, "pop_total"] / (joined.loc[valid, "mahalle_area_m2"] / 1_000_000)
+            ).median()
+            joined.loc[joined["pop_total"].isna(), "pop_total"] = (
+                joined.loc[joined["pop_total"].isna(), "mahalle_area_m2"] / 1_000_000
+            ) * median_density
+            print(f"  Imputed {len(missing)} missing mahalle(s) with median density: {median_density:.1f}/km²")
+
 
     has_age = bool(joined["pop_15_34"].notna().any())
     overlay_cols = ["mahalle_key", "mahalle_area_m2", "pop_total", "geometry"]

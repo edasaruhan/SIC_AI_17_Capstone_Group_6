@@ -151,6 +151,14 @@ def build_pillars(grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     out["complementary_score"] = 0.60 * scaled["restaurants_500m"] + 0.40 * scaled["shops_500m"]
     # High café-per-demand → low opportunity. Empty cells with no demand stay mid/low.
     out["saturation_score"] = 1.0 - scaled["saturation_ratio"]
+
+    # --- Second-pass rescaling ---
+    # Each pillar is a weighted sub-sum of MinMax features; no single cell can score
+    # 1.0 on every sub-feature simultaneously, so raw pillar max is typically 0.5–0.9.
+    # Rescaling pillars to [0, 1] ensures the final suitability score reaches ~90-100
+    # for the genuinely best cells and makes the colour map meaningful.
+    pillar_cols = list(PILLAR_LABELS.keys())
+    out = _minmax(out, pillar_cols)
     return out
 
 
@@ -188,6 +196,7 @@ def top_cells(grid: gpd.GeoDataFrame, n: int = 10) -> pd.DataFrame:
         "population_score_100",
         "complementary_score_100",
         "saturation_score_100",
+        "cafe_similarity_score",
         "cafes_500m",
         "bus_stops_400m",
         "metro_distance",

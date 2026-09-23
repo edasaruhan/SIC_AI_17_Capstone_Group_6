@@ -239,6 +239,7 @@ def grid_deck(
         "population_score_100",
         "complementary_score_100",
         "saturation_score_100",
+        "cafe_similarity_score",
         "cafes_500m",
         "bus_stops_400m",
     ]
@@ -246,13 +247,14 @@ def grid_deck(
     layer = pdk.Layer(
         "GeoJsonLayer",
         data=frame[keep].__geo_interface__,
-        get_fill_color="[r, g, b, a]",
+        get_fill_color="[properties.r, properties.g, properties.b, properties.a]",
         get_line_color=[30, 30, 30, 80],
         get_line_width=20,
         line_width_min_pixels=0.4,
         pickable=True,
         auto_highlight=True,
     )
+
     layers = [layer]
     if selected_cell_id is not None:
         picked = frame.loc[frame["cell_id"] == selected_cell_id, ["geometry"]]
@@ -275,6 +277,7 @@ def grid_deck(
         "<br/>Talep {demand_score_100} · Ulaşım {accessibility_score_100}"
         "<br/>Nüfus {population_score_100} · Tamamlayıcı {complementary_score_100}"
         "<br/>Fırsat {saturation_score_100}"
+        "<br/>🤖 RF Benzerlik: {cafe_similarity_score}/100"
     )
     return pdk.Deck(
         initial_view_state=_view_for_cell(frame, selected_cell_id),

@@ -18,8 +18,72 @@ from src.scoring import (
     top_cells,
 )
 from src.visualization import grid_deck, osm_deck
+from src.cafe_similarity import train_and_score, feature_importance_table
 
 st.set_page_config(page_title="Retail Location Intelligence", layout="wide")
+
+# ── Loading & Stale Styling: Ekran kararmasını engelle, dönen çember ekle ──
+st.markdown(
+    """
+    <style>
+    /* 1. Güncelleme anında ekranın kararmasını (stale opacity) tamamen engelle */
+    [data-stale="true"],
+    div[data-stale="true"],
+    .stApp [data-stale="true"],
+    div[data-testid="stAppViewBlockContainer"] [data-stale="true"],
+    div[data-testid="stDeckGlJsonChart"][data-stale="true"],
+    div[data-testid="stDeckGlJsonChart"] {
+        opacity: 1 !important;
+        transition: none !important;
+        filter: none !important;
+    }
+    .stApp div[data-stale="true"] * {
+        opacity: 1 !important;
+    }
+    div[data-testid="stAppViewBlockContainer"] {
+        transition: none !important;
+    }
+
+    /* 2. Sağ üstteki Streamlit yüklenme ibresini görünür tut */
+    [data-testid="stStatusWidget"] {
+        visibility: visible !important;
+        display: inline-flex !important;
+    }
+
+    /* 3. Yükleme ibresi (Spinner) stili: Metin kesinlikle dönmez, şık ve sabit kalır */
+    .stSpinner {
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        margin: 16px auto !important;
+        padding: 10px 22px !important;
+        background: rgba(30, 41, 59, 0.85) !important;
+        border: 1px solid rgba(46, 204, 113, 0.5) !important;
+        border-radius: 24px !important;
+        width: fit-content !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
+    }
+    .stSpinner span,
+    .stSpinner p,
+    .stSpinner div[data-testid="stMarkdownContainer"] {
+        color: #2ecc71 !important;
+        font-weight: 500 !important;
+        font-size: 14px !important;
+        margin: 0 !important;
+    }
+    .stSpinner svg,
+    .stSpinner i {
+        stroke: #2ecc71 !important;
+        fill: #2ecc71 !important;
+        color: #2ecc71 !important;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
 st.title("Retail Location Intelligence")
 st.caption(
     "Çankaya kafe konum karar desteği · açıklanabilir 0–100 puan · kârlılık tahmini değil"
@@ -88,6 +152,16 @@ def _sensitivity(path_str: str, mtime: float) -> pd.DataFrame:
     return sensitivity_table(_read_file(path_str))
 
 
+@st.cache_data(show_spinner="Kafe benzerlik modeli hesaplanıyor… (ilk açılışta ~30 sn)")
+def _similarity_scores(path_str: str, mtime: float) -> tuple[gpd.GeoDataFrame, pd.DataFrame]:
+    """Train RF café-similarity model and return grid with scores and importance table."""
+    grid = _read_file(path_str)
+    grid_out, _cv = train_and_score(grid)
+    imp_df = feature_importance_table(train_and_score.feature_importances_)
+    return grid_out, imp_df
+
+
+
 def _feature_grid_path() -> Path | None:
     for path in GRID_CANDIDATES:
         if path.exists():
@@ -107,6 +181,8 @@ def _headline(cell: pd.Series) -> str:
 
 def _render_explanation(cell: pd.Series) -> None:
     st.markdown(f"**{_headline(cell)}**")
+
+    # ── MCDA Pillar Bar Chart ──────────────────────────────────────────────
     pillars = pd.DataFrame(
         {
             "Bileşen": list(PILLAR_CHART_LABELS.values()),
@@ -114,6 +190,8 @@ def _render_explanation(cell: pd.Series) -> None:
         }
     )
     st.bar_chart(pillars.set_index("Bileşen"))
+
+    # ── Ham metrikler ──────────────────────────────────────────────────────
     c1, c2, c3 = st.columns(3)
     c1.metric("Kafe (500 m)", int(cell.get("cafes_500m", 0)))
     c2.metric("Durak (400 m)", int(cell.get("bus_stops_400m", 0)))
@@ -128,10 +206,31 @@ def _render_explanation(cell: pd.Series) -> None:
     e2.metric("Mağaza (500 m)", int(cell.get("shops_500m", 0)))
     pop = cell.get("population")
     e3.metric("Hücre nüfus vekili", f"{pop:.0f}" if pd.notna(pop) else "—")
+
+    # ── RF Kafe Benzerlik Skoru ────────────────────────────────────────────
+    sim = cell.get("cafe_similarity_score")
+    if pd.notna(sim):
+        st.divider()
+        st.markdown("**🤖 Mevcut Kafe Lokasyonlarına Benzerlik — Random Forest (Karşılaştırma Katmanı)**")
+        rf1, rf2 = st.columns([1, 2])
+        rf1.metric(
+            "Benzerlik skoru",
+            f"{float(sim):.0f}/100",
+            help="Bu hücrenin mevcut kafe bulunan yerlere özellik benzerliği. Kârlılık tahmini DEĞİLDİR.",
+        )
+        rf2.warning(
+            "Bu skor **'bu hücre mevcut kafelerin bulunduğu yerlere benziyor mu?'** "
+            "sorusuna yanıt verir — kâr, ciro veya başarı tahmini **değildir**. "
+            "MCDA puanıyla birlikte ek bir karşılaştırma katmanı olarak kullanın."
+        )
+
     st.caption(
-        "Mevcut kafe sayısı başarı değildir. Doygunluk talep vekiline göredir; "
-        "boş hücre yüksek fırsat sayılmaz. Cadde adı yalnızca etiket (en yakın OSM yolu)."
+        "⚠️ Ağırlıklar Huff/gravity model literatürüne dayalı önceden belirlenmiş bir öncellik (prior); "
+        "kârlılık verisinden öğrenilmedi. Duyarlılık tablosunda ±10 puan şoku altında sıralama kararlılığı "
+        "gösterilmiştir. Boş hücre otomatik olarak yüksek fırsat sayılmaz."
     )
+
+
 
 
 with st.sidebar:
@@ -179,8 +278,42 @@ with st.sidebar:
 
     min_score = st.slider("Minimum uygunluk", 0, 100, 0)
 
-    with st.expander("Bu ağırlıklar neden böyle?"):
+    with st.expander("📚 Bu ağırlıklar neden böyle? (Literatür gerekçesi)"):
         st.markdown(WEIGHT_RATIONALE)
+        st.markdown("""
+**Referans:** Huff (1964) gravity modeli ve perakende konum MCDA çalışmaları
+(Baviera-Puig vd. 2016; Hernández vd. 2004) catchment aktivitesini
+erişilebilirliğin önüne koyar. Bu yaklaşım aynı önceliği yansıtır.
+
+| Bileşen | Ağırlık | Gerekçe |
+|---|---:|---|
+| Potansiyel talep | %30 | Huff/gravity: havuz aktivitesi ana sürücü |
+| Erişilebilirlik | %25 | Kafe = kolaylık malı, bağlantı kritik |
+| Nüfus | %20 | Mahalle bazlı veri kaba; baskın olmasın |
+| Tamamlayıcı | %15 | Karışık kullanım agglomeration etkisi |
+| Doygunluk | %10 | OSM eksik; düşük ağırlık güvenli |
+
+*Duyarlılık tablosunda her ağırlığa ±10 puan şoku uygulanmış ve Spearman
+sıralama korelasyonu ile ilk-50 örtüşmesi raporlanmıştır.*
+""")
+
+    with st.expander("🤖 Random Forest Benzerlik Modeli hakkında"):
+        st.markdown("""
+**Ne öğrenir?**
+`cafes_500m ≥ 1` → bu hücre mevcut kafeli lokasyonlara benziyor mu?
+
+**Ne öğrenmez?**
+Kârlılık, ciro, başarı/başarısızlık — bu veriler projede **yoktur**.
+
+**Doğrulama yöntemi:**
+Mahalle bazlı spatial cross-validation (k=5). Komşu hücreler aynı
+fold'a düşmez; yani sınır sızması (spatial leakage) önlenir.
+ROC-AUC konsola yazdırılır. Beklenen aralık: 0.70 – 0.85.
+
+**Çıktı:**
+Her hücre için 0–100 arası `cafe_similarity_score`. MCDA uygunluk
+puanıyla yan yana karşılaştırma katmanı olarak kullanın.
+""")
 
     with st.expander("TÜİK dosyası"):
         st.markdown(
@@ -217,6 +350,7 @@ Mahalle toplam nüfus: `data/raw/tuik/cankaya_mahalle_nufus.csv`
         grid_metric = st.selectbox(
             "Hücre rengi",
             [
+                "cafe_similarity_score",
                 "cafes_500m",
                 "restaurants_500m",
                 "bus_stops_400m",
@@ -273,18 +407,20 @@ else:
     st.info("OSM nokta katmanları yok; uygunluk haritası işlenmiş grid ile açılır.")
 
 if map_mode == "OSM noktaları":
-    boundary = _read_file(str(BOUNDARY_PATH))
-    walk_edges = _read_file(str(WALK_PATH)) if show_walk and WALK_PATH.exists() else None
-    st.pydeck_chart(
-        osm_deck(
-            boundary,
-            layers,
-            visible=visible,
-            walk_edges=walk_edges,
-            show_walk=show_walk,
-        ),
-        width="stretch",
-    )
+    with st.spinner("OSM noktaları ve harita hazırlanıyor…"):
+        boundary = _read_file(str(BOUNDARY_PATH))
+        walk_edges = _read_file(str(WALK_PATH)) if show_walk and WALK_PATH.exists() else None
+        st.pydeck_chart(
+            osm_deck(
+                boundary,
+                layers,
+                visible=visible,
+                walk_edges=walk_edges,
+                show_walk=show_walk,
+            ),
+            width="stretch",
+        )
+
 else:
     if grid_path is None:
         st.warning("Grid henüz yok. `python -m src.build_features` çalıştırın.")
@@ -292,6 +428,14 @@ else:
 
     features = _with_streets(str(grid_path), grid_path.stat().st_mtime)
     scored_all = score_grid(features, weights)
+
+    # RF café-similarity scores (cached — only recomputed when parquet changes)
+    sim_grid, imp_df = _similarity_scores(str(grid_path), grid_path.stat().st_mtime)
+    if "cafe_similarity_score" in sim_grid.columns:
+        sim_cols = sim_grid[["cell_id", "cafe_similarity_score"]].copy()
+        scored_all = scored_all.merge(sim_cols, on="cell_id", how="left")
+
+
     score_ceiling = float(scored_all["suitability_score"].max())
 
     mahalle_names = sorted(
@@ -345,10 +489,12 @@ else:
 
     color_col = "suitability_score" if map_mode == "Uygunluk puanı" else grid_metric
     invert = color_col == "metro_distance"
-    st.pydeck_chart(
-        grid_deck(scored, color_col, invert=invert, selected_cell_id=selected_id),
-        width="stretch",
-    )
+    with st.spinner("Uygunluk haritası hazırlanıyor…"):
+        st.pydeck_chart(
+            grid_deck(scored, color_col, invert=invert, selected_cell_id=selected_id),
+            width="stretch",
+        )
+
     st.caption(
         f"{len(scored)} hücre gösteriliyor · tavan {score_ceiling:.0f}/100 "
         "(teorik 100, tüm bileşenler aynı anda en yüksek olsa). "
@@ -372,6 +518,7 @@ else:
                 "population_score_100": "Nüfus",
                 "complementary_score_100": "Tamamlayıcı",
                 "saturation_score_100": "Fırsat",
+                "cafe_similarity_score": "RF Benzerlik",
                 "cafes_500m": "Kafe 500m",
                 "bus_stops_400m": "Durak 400m",
             }
@@ -416,16 +563,28 @@ else:
         )
         st.dataframe(show, hide_index=True, width="stretch")
 
+    with st.expander("🔍 Random Forest — Özellik Önemleri (Gini)"):
+        st.caption(
+            "RF modelinin hangi özelliklere daha çok ağırlık verdiğini gösterir. "
+            "Yüksek önem = o özellik 'kafe olan yerleri' sınıflandırmada daha belirleyici."
+        )
+        if imp_df is not None and not imp_df.empty:
+            st.bar_chart(imp_df.set_index("Özellik")["Önem %"])
+            st.dataframe(imp_df, hide_index=True, width="stretch")
+        else:
+            st.info("Benzerlik modeli yüklenmedi — uygunluk puanı modunda açın.")
+
+
 with st.expander("Bu çıktı neyi iddia etmez"):
     st.markdown(
         """
 Bu uygulama **veri temelli, açıklanabilir bir kafe konum karar destek sistemidir.**
 
-- Hücrede kafe olması o işletmenin başarılı olduğu anlamına gelmez.
-- Random Forest veya benzeri bir model **henüz yok**; eklenirse çıktı adı
-  **“mevcut kafe lokasyonlarına benzerlik”** olur, kârlılık değil.
-- Ciro, günlük müşteri, kira, kapanma tarihi yok.
-- Ağırlıklar bir **ön kabul**dür; kaydırabilirsiniz. Duyarlılık tablosu yukarıdadır.
+- Hücrede kafe olması o işletmenin **basarili** oldugu anlamina gelmez.
+- Random Forest modeli **"mevcut kafe lokasyonlarina benzerlik"** ogrenir — karlılık degil.
+  Mahalle bazlı spatial cross-validation ile degerlendirmistir (spatial leakage onlenir).
+- Ciro, gunluk musteri, kira, kapanma tarihi verisi yoktur.
+- MCDA agırlıkları Huff/gravity literaturune dayalı bir **on kabul**dur; kaydırıp degistirebilirsiniz.
         """
     )
 
