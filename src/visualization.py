@@ -221,8 +221,45 @@ def grid_deck(
         frame["mahalle_name"] = ""
     if "street_name" not in frame.columns:
         frame["street_name"] = ""
-    frame["street_name"] = frame["street_name"].fillna("").astype(str)
-    frame["tooltip"] = frame[value_col].map(lambda v: f"{value_col}: {v}")
+    METRIC_LABEL_TR = {
+        "suitability_score": "Uygunluk Puanı",
+        "cafe_similarity_score": "Kafe Benzerliği (RF)",
+        "cafes_500m": "Kafe Sayısı (500m)",
+        "restaurants_500m": "Restoran Sayısı (500m)",
+        "bus_stops_400m": "Otobüs Durağı (400m)",
+        "metro_distance": "Metroya Mesafe (m)",
+        "universities_1000m": "Üniversite (1km)",
+        "schools_750m": "Okul (750m)",
+        "parks_500m": "Park (500m)",
+        "shops_500m": "Mağaza (500m)",
+        "road_intersections": "Yol Kesişimi",
+        "population": "Hücre Nüfusu",
+        "population_density": "Nüfus Yoğunluğu",
+        "poi_diversity": "POI Çeşitliliği",
+    }
+    lbl = METRIC_LABEL_TR.get(value_col, value_col)
+    frame["tooltip"] = frame[value_col].map(lambda v: f"{lbl}: {v}")
+
+    if "cafe_similarity_score" in frame.columns:
+        frame["cafe_similarity_score"] = (
+            pd.to_numeric(frame["cafe_similarity_score"], errors="coerce")
+            .fillna(0.0)
+            .round(1)
+        )
+    else:
+        frame["cafe_similarity_score"] = 0.0
+
+    for col in [
+        "suitability_score",
+        "demand_score_100",
+        "accessibility_score_100",
+        "population_score_100",
+        "complementary_score_100",
+        "saturation_score_100",
+    ]:
+        if col in frame.columns:
+            frame[col] = pd.to_numeric(frame[col], errors="coerce").fillna(0.0).round(1)
+
     keep_cols = [
         "cell_id",
         "mahalle_name",
@@ -271,13 +308,22 @@ def grid_deck(
                     pickable=False,
                 )
             )
+
+    extra_metric = (
+        "<br/><b>Seçili Metrik:</b> {tooltip}"
+        if value_col not in ["suitability_score", "cafe_similarity_score"]
+        else ""
+    )
     html = (
-        "<b>{mahalle_name}</b><br/>{street_name}<br/>Hücre {cell_id}<br/>{tooltip}"
-        "<br/>Uygunluk: {suitability_score}/100"
-        "<br/>Talep {demand_score_100} · Ulaşım {accessibility_score_100}"
-        "<br/>Nüfus {population_score_100} · Tamamlayıcı {complementary_score_100}"
-        "<br/>Fırsat {saturation_score_100}"
-        "<br/>🤖 RF Benzerlik: {cafe_similarity_score}/100"
+        "<b>{mahalle_name}</b><br/>{street_name}<br/>Hücre No: {cell_id}"
+        "<hr style='margin: 4px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.25);'/>"
+        "<b>Uygunluk Puanı:</b> {suitability_score}/100"
+        "<br/><b>Kafe Benzerlik Skoru:</b> {cafe_similarity_score}/100"
+        + extra_metric
+        + "<hr style='margin: 4px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.25);'/>"
+        "Talep: {demand_score_100}/100 · Ulaşım: {accessibility_score_100}/100"
+        "<br/>Nüfus: {population_score_100}/100 · Tamamlayıcı: {complementary_score_100}/100"
+        "<br/>Fırsat: {saturation_score_100}/100"
     )
     return pdk.Deck(
         initial_view_state=_view_for_cell(frame, selected_cell_id),
@@ -285,3 +331,4 @@ def grid_deck(
         tooltip={"html": html, "style": {"color": "white"}},
         map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
     )
+

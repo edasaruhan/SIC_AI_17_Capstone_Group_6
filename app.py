@@ -6,6 +6,15 @@ import geopandas as gpd
 import pandas as pd
 import streamlit as st
 
+import importlib
+import src.visualization
+import src.scoring
+import src.cafe_similarity
+
+importlib.reload(src.visualization)
+importlib.reload(src.scoring)
+importlib.reload(src.cafe_similarity)
+
 from src.attach_streets import attach_street_names
 from src.collect_osm_data import LAYER_FILES, RAW_DIR, run as collect_osm
 from src.scoring import (
@@ -20,7 +29,8 @@ from src.scoring import (
 from src.visualization import grid_deck, osm_deck
 from src.cafe_similarity import train_and_score, feature_importance_table
 
-st.set_page_config(page_title="Retail Location Intelligence", layout="wide")
+
+st.set_page_config(page_title="Perakende Konum Zekası - Çankaya Kafe Karar Desteği", layout="wide")
 
 # ── Loading & Stale Styling: Ekran kararmasını engelle, dönen çember ekle ──
 st.markdown(
@@ -84,10 +94,11 @@ st.markdown(
 )
 
 
-st.title("Retail Location Intelligence")
+st.title("Perakende Konum Zekası (Retail Location Intelligence)")
 st.caption(
-    "Çankaya kafe konum karar desteği · açıklanabilir 0–100 puan · kârlılık tahmini değil"
+    "Çankaya kafe konum karar desteği · Açıklanabilir 0–100 puan · Kârlılık tahmini değil"
 )
+
 
 BOUNDARY_PATH = RAW_DIR / "cankaya_boundary.geojson"
 POIS_PATH = RAW_DIR / "cankaya_pois.geojson"
@@ -331,7 +342,8 @@ Mahalle toplam nüfus: `data/raw/tuik/cankaya_mahalle_nufus.csv`
     show_school = st.checkbox("Okullar", value=False)
     show_hosp = st.checkbox("Hastane / klinik", value=False)
     show_park = st.checkbox("Parklar", value=False)
-    show_shop = st.checkbox("Alışveriş (shop=*)", value=False)
+    show_shop = st.checkbox("Alışveriş", value=False)
+
     show_bus = st.checkbox("Otobüs durakları", value=False)
     show_metro = st.checkbox("Metro / istasyon", value=False)
     show_inter = st.checkbox("Yol kesişimleri", value=False)
@@ -347,24 +359,27 @@ Mahalle toplam nüfus: `data/raw/tuik/cankaya_mahalle_nufus.csv`
 
     grid_metric = "suitability_score"
     if map_mode == "Ham grid özelliği":
+        GRID_METRIC_LABELS = {
+            "cafe_similarity_score": "Kafe Benzerliği (Random Forest)",
+            "cafes_500m": "Kafe Sayısı (500 m)",
+            "restaurants_500m": "Restoran Sayısı (500 m)",
+            "bus_stops_400m": "Otobüs Durağı Sayısı (400 m)",
+            "metro_distance": "Metroya Mesafe (m)",
+            "universities_1000m": "Üniversite Sayısı (1 km)",
+            "schools_750m": "Okul Sayısı (750 m)",
+            "parks_500m": "Park Sayısı (500 m)",
+            "shops_500m": "Mağaza Sayısı (500 m)",
+            "road_intersections": "Yol Kesişimi Sayısı",
+            "population": "Tahmini Hücre Nüfusu",
+            "population_density": "Nüfus Yoğunluğu (kişi/km²)",
+            "poi_diversity": "POI Çeşitliliği",
+        }
         grid_metric = st.selectbox(
             "Hücre rengi",
-            [
-                "cafe_similarity_score",
-                "cafes_500m",
-                "restaurants_500m",
-                "bus_stops_400m",
-                "metro_distance",
-                "universities_1000m",
-                "schools_750m",
-                "parks_500m",
-                "shops_500m",
-                "road_intersections",
-                "population",
-                "population_density",
-                "poi_diversity",
-            ],
+            list(GRID_METRIC_LABELS.keys()),
+            format_func=lambda k: GRID_METRIC_LABELS.get(k, k),
         )
+
 
 visible: set[str] = set()
 if show_cafe:
@@ -432,8 +447,11 @@ else:
     # RF café-similarity scores (cached — only recomputed when parquet changes)
     sim_grid, imp_df = _similarity_scores(str(grid_path), grid_path.stat().st_mtime)
     if "cafe_similarity_score" in sim_grid.columns:
+        if "cafe_similarity_score" in scored_all.columns:
+            scored_all = scored_all.drop(columns=["cafe_similarity_score"])
         sim_cols = sim_grid[["cell_id", "cafe_similarity_score"]].copy()
         scored_all = scored_all.merge(sim_cols, on="cell_id", how="left")
+
 
 
     score_ceiling = float(scored_all["suitability_score"].max())
@@ -507,22 +525,52 @@ else:
     with left:
         st.subheader("En uygun 10 hücre")
         st.caption("Satır seçince sağdaki açıklama ve harita vurgusu güncellenir.")
-        display = ranked.rename(
+        display = ranked.copy()
+        # Sayısal değerleri temiz biçimlendirme
+        for c in [
+            "suitability_score",
+            "cafe_similarity_score",
+            "demand_score_100",
+            "accessibility_score_100",
+            "population_score_100",
+            "complementary_score_100",
+            "saturation_score_100",
+        ]:
+            if c in display.columns:
+                display[c] = pd.to_numeric(display[c], errors="coerce").fillna(0.0).round(1)
+
+        if "metro_distance" in display.columns:
+            display["metro_distance"] = (
+                pd.to_numeric(display["metro_distance"], errors="coerce").round(0).fillna(0).astype(int)
+            )
+        if "population" in display.columns:
+            display["population"] = (
+                pd.to_numeric(display["population"], errors="coerce").round(0).fillna(0).astype(int)
+            )
+
+        display = display.rename(
             columns={
-                "cell_id": "Hücre",
+                "cell_id": "Hücre No",
                 "mahalle_name": "Mahalle",
-                "street_name": "Cadde",
-                "suitability_score": "Puan",
-                "demand_score_100": "Talep",
-                "accessibility_score_100": "Ulaşım",
-                "population_score_100": "Nüfus",
-                "complementary_score_100": "Tamamlayıcı",
-                "saturation_score_100": "Fırsat",
-                "cafe_similarity_score": "RF Benzerlik",
-                "cafes_500m": "Kafe 500m",
-                "bus_stops_400m": "Durak 400m",
+                "street_name": "Cadde / Sokak",
+                "suitability_score": "Uygunluk Puanı /100",
+                "cafe_similarity_score": "Kafe Benzerlik Skoru /100",
+                "demand_score_100": "Talep /100",
+                "accessibility_score_100": "Ulaşım /100",
+                "population_score_100": "Nüfus /100",
+                "complementary_score_100": "Tamamlayıcı /100",
+                "saturation_score_100": "Fırsat /100",
+                "cafes_500m": "Kafe (500m)",
+                "bus_stops_400m": "Durak (400m)",
+                "metro_distance": "Metro Mesafesi (m)",
+                "restaurants_500m": "Restoran (500m)",
+                "shops_500m": "Mağaza (500m)",
+                "universities_1000m": "Üniversite (1km)",
+                "parks_500m": "Park (500m)",
+                "population": "Hücre Nüfusu",
             }
         )
+
         event = st.dataframe(
             display,
             width="stretch",

@@ -25,42 +25,27 @@ DEFAULT_WEIGHTS = {
 }
 
 PILLAR_LABELS = {
-    "demand_score": "Potential demand",
-    "accessibility_score": "Transit / walk access",
-    "population_score": "Population density",
-    "complementary_score": "Complementary businesses",
-    "saturation_score": "Opportunity vs saturation",
+    "demand_score": "Potansiyel talep",
+    "accessibility_score": "Ulaşım ve yaya erişimi",
+    "population_score": "Nüfus yoğunluğu",
+    "complementary_score": "Tamamlayıcı işletmeler",
+    "saturation_score": "Fırsat ve doygunluk",
 }
 
 WEIGHT_RATIONALE = """
-Weights are a stated prior for a sit-down / takeaway café, then stress-tested.
+Ağırlıklar, paket servis ve oturmalı bir kafe modeli için literatür tabanlı belirlenmiş bir ön kabuldür (prior).
 
-They are not estimated from revenue. There is no turnover, rent or closure
-label in this project, so we do not fit weights to “success”.
+Bu ağırlıklar ciro veya gelir verisinden tahmin edilmemiştir; projede kârlılık, kira veya kapanma verisi bulunmadığı için ağırlıklar "başarıya" uydurulmamıştır (overfit edilmemiştir).
 
-Demand 30%. Gravity / Huff-style retail location work treats the size of the
-catchment and activity generators as the main driver of potential visits.
-Universities, shops, parks, schools and POI mix stand in for that catchment.
+- **Potansiyel Talep (%30):** Perakende konumlandırmada Huff (1964) yerçekimi (gravity) modeli yaklaşımı, çekim alanının büyüklüğünü ve hareket üreten odak noktalarını ziyaretçi sayısının ana belirleyicisi sayar. Üniversiteler, mağazalar, parklar, okullar ve POI çeşitliliği bu çekim alanını temsil eder.
+- **Erişilebilirlik (%25):** Kafeler kolaylık/uğrak işletmeleridir; otobüs durakları, metro istasyonuna yakınlık ve yol kesişimleri insanların o noktaya fiilen nasıl ulaşabileceğini belirler. İyi bağlantılı ama tenha bir dış mahallede kafe potansiyeli sınırlı kalacağı için talebin hemen arkasında yer alır.
+- **Nüfus (%20):** İkamet eden nüfus taban taleptir. TÜİK mahalle toplamları 300 metrelik hücrelere alansal payla dağıtıldığından bu vekil görecelidir; haritayı tek başına domine etmesine izin verilmez.
+- **Tamamlayıcı İşletmeler (%15):** Yakın çevredeki restoranlar ve mağazalar canlı, karma kullanımlı sokakları (pozitif kümelenme/agglomeration etkisi) gösterir. Aynı kategorideki kafeler rekabet nedeniyle burada sayılmaz.
+- **Doygunluk ve Fırsat (%10):** Rekabet önemlidir; ancak içinde hiç kafe olmayan bir hücre otomatik olarak bir fırsat boşluğu değildir; orada talep de olmayabilir. Bağıl doygunluk `Kafe / (Talep Vekili + 1)` formülüyle hesaplanıp ters çevrilir. OpenStreetMap kafe kayıtları eksik olabileceğinden ve satışlarda aşırı doygunluk doğrudan gözlemlenemediğinden bu ağırlık kontrollü ve düşük tutulmuştur.
 
-Accessibility 25%. Cafés are convenience goods: bus stops, metro distance and
-street intersections condition who can actually arrive. Ranked just below
-demand because a well-connected empty fringe still has little café activity.
-
-Population 20%. Residential density is a demand floor. Mahalle totals are
-spread by overlapping area onto 300 m cells, so this proxy is coarse; it
-must not dominate the map.
-
-Complementary 15%. Restaurants and shops mark mixed-use streets (positive
-agglomeration). Same-category cafés are *not* counted here.
-
-Saturation 10%. Competition matters, but a cell with zero cafés is not
-automatically a gap — it may have no demand either. Relative saturation is
-cafés / (demand proxy + 1), then inverted. The weight is small because OSM
-café counts are incomplete and we cannot observe overcrowding in sales.
-
-A one-at-a-time ±0.10 perturbation (re-normalised) is used as a small
-sensitivity check: ranks should not collapse when the prior moves a little.
+Her bir bileşene tek tek uygulanan ±%10'luk duyarlılık şoku, bu ön kabulün küçük hareketlerinde hücre sıralamalarının bozulmadığını (kararlılığını) doğrulamak için kullanılır.
 """
+
 
 
 def _minmax(frame: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
