@@ -1,99 +1,102 @@
-# Perakende Konum Zekası (Retail Location Intelligence)
+# Retail Location Intelligence
 
-**Çankaya (Ankara) İçin Veri Odaklı ve Açıklanabilir Kafe Konum Karar Destek Sistemi**
+**An Explainable Geospatial Decision-Support System for Café Site Selection in Çankaya, Ankara**
 
-Bu proje, açık kaynaklı coğrafi veriler (OpenStreetMap) ve nüfus verileri (TÜİK ADNKS) kullanarak Ankara'nın Çankaya ilçesinde potansiyel kafe açılış lokasyonlarını değerlendiren ve sıralayan **açıklanabilir bir mekânsal karar destek sistemidir**.
+This project develops an explainable, data-driven geospatial decision-support system that evaluates and ranks potential café locations across Çankaya, Ankara using open geographic data (OpenStreetMap) and demographic data (TÜİK ADNKS).
 
-> ⚠️ **Bu proje neyi iddia etmez?**  
-> Bu sistem bir **"kârlılık tahmini"** veya **"başarı garantisi"** modeli değildir. Projede işletmelere ait ciro, kâr marjı, kira maliyeti, ayak trafiği (footfall) veya kapanan/batan işletme etiketleri bulunmamaktadır. Dolayısıyla amaç kârlılık vadetmek değil; yaya erişimi, toplu taşıma, potansiyel talep, mahalle nüfusu ve rekabet doygunluğunu şeffaf bir puanlama matrisiyle karar vericiye sunmaktır.
-
----
-
-## 📌 Temel Felsefe ve Yaklaşım
-
-- **Mevcut Kafe $\neq$ Başarılı Kafe:** Bir hücrede halihazırda kafe bulunması o işletmenin başarılı veya kârlı olduğu anlamına gelmez. Benzer şekilde, içinde kafe olmayan bir hücre otomatik olarak "kötü" veya "boş fırsat" değildir.
-- **Çift Katmanlı Değerlendirme:**
-  1. **Açıklanabilir Kriter Bazlı Puanlama (MCDA):** Huff (1964) yerçekimi modeli ve perakende literatürüne dayalı 5 temel bileşen (0–100 puan).
-  2. **Kafe Benzerlik Modeli (Random Forest):** Mevcut kafelerin bulunduğu bölgelerin mekânsal karakteristiklerini öğrenen ve yeni bölgeleri bu dokuya göre kıyaslayan bir karşılaştırma katmanı.
+> ⚠️ **What this project is NOT:**  
+> This system is **not a revenue forecasting or commercial success prediction model**. The dataset does not contain sales turnover, profit margins, rental rates, foot traffic counts, or business closure history. The objective is not to guarantee financial profitability, but to provide urban planners, retail analysts, and entrepreneurs with a transparent, explainable spatial scoring matrix grounded in accessibility, potential demand, population density, and market saturation.
 
 ---
 
-## 🏗️ Sistem Mimarisi ve Veri Akışı
+## 📌 Core Philosophy & Methodology
+
+- **Presence $\neq$ Profitability:** The presence of existing cafés in a cell does not imply that those businesses are profitable or well-run. Conversely, a cell without cafés is not inherently a poor location or an unexploited commercial opportunity.
+- **Dual-Layer Evaluation Framework:**
+  1. **Explainable Multi-Criteria Decision Analysis (MCDA):** A transparent, literature-grounded scoring engine based on the Huff (1964) retail gravity model, evaluating five distinct spatial pillars (0–100 scale).
+  2. **Café-Location Similarity Classifier (Random Forest):** A machine learning model trained using spatial cross-validation to answer: *"To what extent does this location resemble areas where cafés typically operate?"*
+
+---
+
+## 🏗️ System Architecture & Workflow
 
 ```mermaid
 flowchart TD
-    A["OpenStreetMap (OSMnx)"] --> B["Veri Temizleme & Standardizasyon"]
-    T["TÜİK ADNKS Mahalle Nüfusu"] --> B
-    B --> C["Çankaya'yı 300×300 m Hücrelere Bölme (5.361 Hücre)"]
-    C --> D["Mekânsal Özellik Mühendisliği (Spatial Joins & Buffers)"]
-    D --> E["Açıklanabilir Çok Kriterli Puanlama (MCDA - 5 Temel Bileşen)"]
-    D --> F["Random Forest Kafe Benzerlik Modeli (Spatial CV, k=5)"]
-    E --> G["İnteraktif Karar Destek Arayüzü (Streamlit + PyDeck 3D/2D)"]
+    A["OpenStreetMap (via OSMnx)"] --> B["Data Cleaning & Normalization"]
+    T["TÜİK ADNKS Mahalle Population"] --> B
+    B --> C["Discretize Çankaya into 300×300 m Grid (5,361 Cells)"]
+    C --> D["Spatial Feature Engineering (Buffers, Centroids & Spatial Joins)"]
+    D --> E["Explainable MCDA Suitability Scoring (5 Pillars)"]
+    D --> F["Random Forest Café-Similarity Model (Spatial CV, k=5)"]
+    E --> G["Interactive Decision-Support UI (Streamlit + PyDeck 3D/2D)"]
     F --> G
 ```
 
 ---
 
-## 📊 Veri Kaynakları
+## 📊 Data Sources
 
-| Kaynak | Kullanım Amacı | Kapsam & Durum |
+| Source | Role / Usage | Coverage & Details |
 | --- | --- | --- |
-| **OpenStreetMap (OSMnx)** | İlçe sınırı; kafeler, restoranlar, üniversiteler, okullar, hastaneler, parklar, mağazalar (`shop=*`); otobüs durakları, metro istasyonları, yol ağı ve kesişimler | Aktif kullanımda (10+ katman) |
-| **TÜİK ADNKS** | Mahalle bazlı toplam nüfusun hücrelere alansal ağırlıkla (`areal-weighting`) dağıtımı | Aktif kullanımda (Sakarya Mah. medyan interpolasyonu ile) |
-| **ABB (Şeffaf Ankara)** | EGO otobüs biniş verileri, sefer sıklıkları, belediye Wi-Fi ve sosyal tesisler | Gelecek yol haritası (Planlandı) |
+| **OpenStreetMap (OSMnx)** | District boundaries; target use (`amenity=cafe`); restaurants/fast food; universities, schools, hospitals, parks, retail (`shop=*`); bus stops, subway stations, pedestrian/drive street networks | Active (10+ thematic layers) |
+| **TÜİK ADNKS** | Neighborhood-level (`mahalle`) total population distributed across 300 m cells via areal weighting | Active (with areal median density imputation for unmapped units) |
+| **Ankara Metropolitan Municipality ([Şeffaf Ankara](https://www.ankara.bel.tr/))** | EGO public transit boardings, route frequencies, municipal Wi-Fi access points, social infrastructure | Planned roadmap integration |
 
-*Not: Kampüsler, büyük şehir parkları ve hastaneler gibi poligon geometriler mekânsal sayımlardan önce ağırlık merkezlerine (centroid) indirgenmiştir.*
+*Note: Large polygonal geometries (university campuses, municipal parks, hospital compounds) are collapsed to geometric centroids prior to radius-based spatial aggregations.*
 
 ---
 
-## 📅 Proje Gelişim Takvimi ve Durum
+## 📅 Project Milestones & Status
 
-| Hafta | Odak Noktası | Durum |
+| Phase | Core Objective | Status |
 | :---: | :--- | :---: |
-| **1** | Çankaya için OpenStreetMap veri toplama altyapısı ve POI sınıflandırması | ✅ Tamamlandı |
-| **2** | 300 m hücre ızgarası (Grid) ve mekânsal tampon özellikleri (buffer joins) | ✅ Tamamlandı |
-| **3** | Ağırlıklı uygunluk skoru (MCDA), duyarlılık analizi ve açıklanabilirlik paneli | ✅ Tamamlandı |
-| **4** | Random Forest kafe benzerlik modeli (Mahalle bazlı Spatial Cross-Validation) | ✅ Tamamlandı |
-| **5** | İnteraktif harita, dinamik filtreler, 28 birim testi, Docker ve CI/CD entegrasyonu | ✅ Tamamlandı |
+| **Week 1** | OpenStreetMap data extraction pipeline and POI taxonomy for Çankaya | ✅ Complete |
+| **Week 2** | 300 m hexagonal/square grid generation and spatial buffer feature engineering | ✅ Complete |
+| **Week 3** | Weighted suitability scoring engine (MCDA), sensitivity analysis & UI explanation | ✅ Complete |
+| **Week 4** | Random Forest café-similarity model (with spatial group cross-validation) | ✅ Complete |
+| **Week 5** | Interactive PyDeck visualizer, dynamic filtering, 28-test unit suite, Docker & CI/CD | ✅ Complete |
 
 ---
 
-## 📐 Puanlama Metodolojisi (MCDA)
+## 📐 Scoring Methodology (MCDA Engine)
 
-Haritadaki her bir 300×300 m hücre için 5 bağımsız alt bileşen (0–1 aralığında) hesaplanır ve ardından ikinci aşama Min–Max normalizasyonuyla dengelenerek 0–100 arası **Uygunluk Puanı** oluşturulur:
+Every 300×300 m cell receives scores across five independent pillars (scaled 0–1), which undergo a second-pass Min–Max normalization to ensure full dynamic range before computing the final composite suitability score:
 
-$$\text{Uygunluk Puanı} = 100 \times (0.30D + 0.25A + 0.20P + 0.15T + 0.10S)$$
+$$\text{Suitability Score} = 100 \times (0.30D + 0.25A + 0.20P + 0.15T + 0.10S)$$
 
-| Bileşen | Ağırlık | İçerik ve Hesaplama Yöntemi | Literatür Gerekçesi |
+| Pillar | Weight | Metric Inputs | Literature Rationale |
 | --- | :---: | --- | --- |
-| **D (Potansiyel Talep)** | %30 | Üniversiteler (1 km), mağazalar (500 m), parklar (500 m), okullar (750 m) ve POI çeşitliliği | Huff (1964) yerçekimi modeli: Çekim merkezleri ziyaretçi akışının ana belirleyicisidir. |
-| **A (Ulaşım ve Yaya Erişimi)** | %25 | Otobüs durakları (400 m), metroya yürüme mesafesinin tersi ve yol kesişimleri | Kafe kolaylık/uğrak malıdır; erişilemeyen noktalarda talep realize olamaz. |
-| **P (Nüfus Yoğunluğu)** | %20 | Mahalle toplam nüfusunun hücre alansal payıyla dağıtımı | Taban talep seviyesidir; veri mahalle düzeyinde olduğundan haritayı tek başına domine etmez. |
-| **T (Tamamlayıcı İşletmeler)** | %15 | Yakın restoran ve fast-food noktaları, mağazalar (kafeler hariç) | Pozitif kümelenme (agglomeration) etkisi; canlı karma kullanımlı sokaklar. |
-| **S (Fırsat ve Doygunluk)** | %10 | $\text{Bağıl Doygunluk} = \frac{\text{Kafeler (500 m)}}{\text{Talep Vekili} + 1}$ oranının tersi | Rekabet önemlidir ancak içinde hiç kafe olmayan yer otomatik fırsat değildir (talep de olmayabilir). |
+| **D (Potential Demand)** | 30% | Universities (1 km), shops (500 m), parks (500 m), schools (750 m), and POI diversity | Huff (1964) gravity model: Major activity generators and catchment size are primary drivers of customer visits. |
+| **A (Accessibility & Transit)** | 25% | Bus stops (400 m), inverse network distance to subway stations, and road intersection density | Cafés are convenience goods; customers rarely travel to poorly connected or inaccessible peripheries. |
+| **P (Population Density)** | 20% | Areal-weighted residential population per cell | Represents baseline residential demand floor; constrained to 20% to avoid coarse mahalle boundaries dominating the map. |
+| **T (Complementary Businesses)** | 15% | Restaurants, fast food outlets, and non-café retail establishments (500 m) | Positive agglomeration economies; mixed-use commercial vibrancy supports secondary café footfall. |
+| **S (Opportunity vs. Saturation)** | 10% | Inverse relative saturation: $\frac{\text{Cafés (500 m)}}{\text{Demand Proxy} + 1}$ | Captures competitive pressure. A cell with zero cafés is not an automatic opportunity if demand is also zero. |
 
-> **Duyarlılık Analizi (Sensitivity Analysis):** Kullanıcı ağırlıkları sidebar'dan değiştirebilir. Sistem ayrıca her ağırlığa tek tek uygulanan $\pm\%10$'luk şoklar altında **Spearman sıra korelasyonunu** ve ilk 50 hücre örtüşmesini anlık olarak raporlar.
-
----
-
-## 🤖 Random Forest Kafe Benzerlik Modeli (Hafta 4)
-
-- **Hedef:** Hücrenin mevcut kafe bulunan yerlere olan mekânsal benzerlik olasılığı (`cafe_similarity_score`, 0–100).
-- **Hedef Değişken:** `cafes_500m >= 1` (ikili sınıflandırma). *Veri sızıntısını (leakage) önlemek için kafe sayısı özellik matrisinden çıkarılmıştır.*
-- **Doğrulama Yöntemi:** Komşu hücreler benzer özellik taşıdığından standart K-Fold mekânsal sızıntı (spatial leakage) yaratır. Bu nedenle **Mahalle Gruplu Stratified K-Fold (5 Katlamalı)** uygulanmıştır.
-- **Model Başarısı:** **0.979 ROC-AUC** (5 katlamalı uzamsal çapraz doğrulama ortalaması).
-- **Gini Özellik Önemleri (Top Özellikler):**
-  1. POI Çeşitliliği (%30.2)
-  2. Mağazalar 500 m (%15.4)
-  3. Restoranlar 500 m (%15.0)
-  4. Metro Mesafesi (%10.7)
-  5. Parklar 500 m (%8.4)
+> **Sensitivity Analysis:** The Streamlit dashboard enables users to dynamically adjust weights (automatically normalized to 100%). It also runs an automated one-at-a-time $\pm 10\%$ perturbation stress test, reporting **Spearman rank correlation** and Top-50 rank overlap to demonstrate ranking stability.
 
 ---
 
-## 🧪 Birim Testleri (Unit Tests)
+## 🤖 Random Forest Café-Similarity Model (Week 4)
 
-Projede puanlama formüllerini, ağırlık normalizasyonunu, sınır kontrollerini ve makine öğrenimi boru hattını doğrulayan kapsamlı bir test paketi (`pytest`) bulunmaktadır:
+To complement the deductive MCDA score with inductive machine learning, a secondary comparison model was developed:
+
+- **Objective:** Quantify how closely a cell's spatial attributes match typical café locations (`cafe_similarity_score`, 0–100).
+- **Target Formulation:** Binary label `cafes_500m >= 1`. *Existing café counts are explicitly excluded from feature columns to prevent target leakage.*
+- **Spatial Validation:** Standard K-Fold splits suffer from spatial autocorrelation leakage (neighboring cells sharing similar feature spaces). We employ **Stratified Group 5-Fold Cross-Validation** grouped on `mahalle_name`, ensuring entire neighborhoods are held out during testing.
+- **Model Performance:** **0.979 ROC-AUC** across 5 out-of-fold spatial splits.
+- **Gini Feature Importances:**
+  1. POI Diversity (30.2%)
+  2. Retail Shops within 500 m (15.4%)
+  3. Restaurants within 500 m (15.0%)
+  4. Subway Station Proximity (10.7%)
+  5. Parks within 500 m (8.4%)
+  6. Population Density (6.9%)
+
+---
+
+## 🧪 Unit Testing Suite
+
+The repository includes a comprehensive `pytest` test suite verifying scoring mathematics, weight bounds, leakage prevention, spatial feature transforms, and machine learning outputs:
 
 ```bash
 pytest tests/ -v
@@ -106,99 +109,99 @@ collected 28 items
 tests/test_cafe_similarity.py ...........                                [ 39%]
 tests/test_scoring.py .................                                  [100%]
 
-============================= 28 passed in 5.36s ==============================
+============================== 28 passed in 5.36s =============================
 ```
 
-- `test_scoring.py`: Ağırlık toplamının 1'e eşitliği, negatif ağırlık budaması, 5 pillar'ın 0–1 aralığı ve rescaling sonrası tavan puanın 50'yi aşması, Spearman duyarlılığı ve sıralama kararlılığı.
-- `test_cafe_similarity.py`: Hedef ikililiği, veri sızıntısı olmaması (`cafes_500m` sızıntı kontrolü), 0–100 skor sınırları, CV rapor boyutu ve özellik önemi matrisi.
+- `test_scoring.py`: Weight normalization, non-negativity clipping, 0–1 pillar range validation, post-rescaling ceiling checks, Top-N cell ranking, and Spearman sensitivity computations.
+- `test_cafe_similarity.py`: Feature matrix integrity, zero-leakage verification (`cafes_500m` absence), 0–100 probability calibration, spatial CV fold dimensions, and feature importance table formatting.
 
 ---
 
-## 🚀 Hızlı Başlangıç
+## 🚀 Quick Start Guide
 
-### Gereksinimler
-- Python 3.11 veya 3.12 önerilir.
-- GDAL / GEOS sistem kütüphaneleri (GeoPandas için).
+### Prerequisites
+- Python 3.11 or 3.12.
+- GDAL / GEOS spatial libraries (installed automatically in virtual environments or via package managers).
 
-### 1. Yerel Kurulum
+### 1. Local Setup
 ```bash
-# Depoyu klonlayın
+# Clone the repository
 git clone https://github.com/edasaruhan/SIC_AI_17_Capstone_Group_6.git
 cd SIC_AI_17_Capstone_Group_6
 
-# Sanal ortam oluşturup aktifleştirin
+# Create and activate virtual environment
 python -m venv .venv
 .venv\Scripts\Activate.ps1       # Windows PowerShell
 # source .venv/bin/activate      # Linux / macOS
 
-# Bağımlılıkları yükleyin
+# Install dependencies
 pip install -r requirements.txt
 pip install pytest
 
-# Testleri çalıştırın
+# Execute unit tests
 pytest tests/ -v
 
-# Uygulamayı başlatın
+# Launch the Streamlit application
 streamlit run app.py
 ```
 
-### 2. Docker İle Çalıştırma
-Uygulama tüm coğrafi bağımlılıkları (GDAL, GEOS, PROJ) içeren hazır bir `Dockerfile` ile paketlenmiştir:
+### 2. Docker Deployment
+A containerized image configured with GDAL, GEOS, and PROJ dependencies is available:
 
 ```bash
-# İmajı derleyin
-docker build -t retail-location-ai .
+# Build the Docker image
+docker build -t retail-location-intelligence .
 
-# Konteyneri başlatın
-docker run -p 8501:8501 retail-location-ai
+# Run containerized service on port 8501
+docker run -p 8501:8501 retail-location-intelligence
 ```
-Tarayıcınızda `http://localhost:8501` adresine gidin.
+Access the application at `http://localhost:8501`.
 
 ---
 
-## 📁 Proje Dizin Yapısı
+## 📁 Repository Layout
 
 ```text
 SIC_AI_17_Capstone_Group_6/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml               # GitHub Actions otomatik test iş akışı
+│       └── ci.yml               # GitHub Actions automated test pipeline
 ├── data/
-│   ├── raw/                     # Ham GeoJSON dosyaları (OSM katmanları, sınırlar)
-│   └── processed/               # İşlenmiş grid özellikleri (cankaya_grid_features.parquet)
+│   ├── raw/                     # Raw GeoJSON files (OSM extracts, district boundary)
+│   └── processed/               # Compact spatial feature grid (cankaya_grid_features.parquet)
 ├── src/
 │   ├── __init__.py
-│   ├── collect_osm_data.py      # Overpass API üzerinden OSM POI ve yol ağı indirme
-│   ├── create_grid.py           # 300x300 metre mekânsal hücre ızgarası üretimi
-│   ├── build_features.py        # Mekânsal join'ler ve özellik mühendisliği
-│   ├── allocate_population.py   # TÜİK nüfusunun alansal interpolasyonu (Sakarya Mah. medyan dahil)
-│   ├── tuik.py                  # TÜİK ADNKS mahalle tablosu yükleme ve anahtar eşleme
-│   ├── attach_streets.py        # Hücrelere en yakın OSM cadde/sokak adını etiketleme
-│   ├── scoring.py               # 5 Temel Bileşen (Pillar), rescaling, ağırlıklandırma, duyarlılık
-│   ├── cafe_similarity.py       # Random Forest Kafe Benzerlik Modeli (Spatial Group CV)
-│   └── visualization.py         # PyDeck 2D/3D interaktif harita ve bilgi baloncukları
+│   ├── collect_osm_data.py      # Overpass API extraction for POIs and street networks
+│   ├── create_grid.py           # 300x300 m spatial tessellation engine
+│   ├── build_features.py        # Spatial joins, buffers, and count aggregations
+│   ├── allocate_population.py   # TÜİK population areal-weighting with spatial interpolation
+│   ├── tuik.py                  # Census data parser and neighborhood key mapper
+│   ├── attach_streets.py        # Spatial nearest-street labeling for cells
+│   ├── scoring.py               # 5-Pillar MCDA scoring, normalization, sensitivity analysis
+│   ├── cafe_similarity.py       # Random Forest similarity classifier (Spatial Group CV)
+│   └── visualization.py         # PyDeck 2D/3D map renderers and tooltip builders
 ├── tests/
 │   ├── __init__.py
-│   ├── test_scoring.py          # MCDA ve puanlama testleri (17 test)
-│   └── test_cafe_similarity.py  # RF benzerlik modeli testleri (11 test)
-├── app.py                       # Streamlit web arayüzü ve karar destek paneli
-├── Dockerfile                   # Üretim ortamı için konteyner tanımı
-├── requirements.txt             # Python bağımlılıkları
-└── README.md
+│   ├── test_scoring.py          # MCDA and scoring logic tests (17 tests)
+│   └── test_cafe_similarity.py  # Machine learning and leakage tests (11 tests)
+├── app.py                       # Streamlit web application & decision dashboard
+├── Dockerfile                   # Production container definition
+├── requirements.txt             # Python package dependencies
+└── README.md                    # Project documentation
 ```
 
 ---
 
-## ⚠️ Bilinen Sınırlılıklar
+## ⚠️ Academic Limitations & Assumptions
 
-1. **Talep Göstergeleri Birer Vekildir (Proxy):** Yaya sayımı sensörleri veya anlık GSM yoğunluk verisi olmadığı için talep; okul, üniversite, mağaza ve nüfus yoğunluğu üzerinden modellenmiştir.
-2. **Genç Nüfus Kırılımı (15–34 Yaş):** TÜİK ADNKS verilerinde mahalle düzeyinde yaş kırılımı açık kaynak yayımlanmadığı için mahalle toplam nüfusu kullanılmıştır.
-3. **OpenStreetMap Tamlığı:** Çankaya genel olarak iyi haritalanmış olsa da yeni açılan işletmeler veya küçük sokak kafeleri OSM üzerinde eksik kalabilmektedir.
-4. **Coğrafi Kapsam:** Mevcut veri boru hattı Çankaya ilçesi için kurgulanmıştır.
+1. **Demand Metrics Are Proxies:** Without sensor-based pedestrian counters or telco-provided mobility matrices, foot traffic is approximated via POI density, transit hubs, and residential population.
+2. **Age Cohort Granularity:** TÜİK ADNKS reports age-segmented demographics at municipal level, but not at granular neighborhood scale; total population is utilized as an areal baseline.
+3. **OpenStreetMap Incompleteness:** While Çankaya is extensively mapped, informal or recently opened retail outlets may lag in OSM updates.
+4. **Commercial Outcome Disclaimers:** Suitability rankings reflect multi-criteria locational favorability, not an audited business feasibility report or income projection.
 
 ---
 
-## 📜 Lisans
+## 📜 License
 
-Bu proje [MIT Lisansı](LICENSE) altında lisanslanmıştır.  
-OpenStreetMap verileri © OpenStreetMap katkıcılarına aittir ve [ODbL](https://www.openstreetmap.org/copyright) altında sunulmaktadır.
+This project is licensed under the [MIT License](LICENSE).  
+OpenStreetMap data is © OpenStreetMap contributors and distributed under the [ODbL](https://www.openstreetmap.org/copyright).
