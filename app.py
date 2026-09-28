@@ -28,6 +28,7 @@ from src.scoring import (
 )
 from src.visualization import grid_deck, osm_deck
 from src.cafe_similarity import train_and_score, feature_importance_table
+from src.cafe_grid_competition import cafe_grid_competition
 
 
 st.set_page_config(page_title="Perakende Konum Zekası - Çankaya Kafe Karar Desteği", layout="wide")
@@ -172,6 +173,13 @@ def _similarity_scores(path_str: str, mtime: float) -> tuple[gpd.GeoDataFrame, p
     return grid_out, imp_df
 
 
+@st.cache_data(show_spinner="Kafe rekabet katmanı hesaplanıyor…")
+def _competition_counts(grid_path: str, grid_mtime: float, cafe_path: str, cafe_mtime: float) -> pd.DataFrame:
+    grid = _read_file(grid_path)
+    cafes = _read_file(cafe_path).to_crs(grid.crs)
+    return cafe_grid_competition(grid, cafes)
+
+
 
 def _feature_grid_path() -> Path | None:
     for path in GRID_CANDIDATES:
@@ -218,6 +226,26 @@ def _render_explanation(cell: pd.Series) -> None:
     pop = cell.get("population")
     e3.metric("Hücre nüfus vekili", f"{pop:.0f}" if pd.notna(pop) else "—")
 
+    if "competition_level" in cell.index:
+        st.markdown("**Kafe rekabeti · 300 m kareler**")
+        k1, k9, k25 = st.columns(3)
+        k1.metric("Merkez", int(cell["cafes_cell"]))
+        k9.metric("Toplam 9 kare", int(cell["cafes_9_cells"]))
+        k25.metric("Toplam 25 kare", int(cell["cafes_25_cells"]))
+        st.caption(
+            f"{int(cell['competition_level'])}/3 rekabet eşiği aşıldı: merkez ≥2, "
+            "9 kare ≥6, 25 kare ≥13. Bu eşikler başlangıç varsayımıdır."
+        )
+        if int(cell["covered_cells_25"]) < 25:
+            st.caption(
+                f"İlçe sınırı: geniş çevrede {int(cell['covered_cells_25'])}/25 kare kapsanıyor; "
+                "sayılar ilçenin dışındaki kafeleri içermez."
+            )
+        if int(cell["cafes_25_cells"]) > 0:
+            st.info("Mevcut kafe kümelenmesi var; talep ve rekabet sahada incelenmeli.")
+        else:
+            st.info("Yakın çevrede kayıtlı kafe yok; bu tek başına fırsat anlamına gelmez.")
+
     # ── RF Kafe Benzerlik Skoru ────────────────────────────────────────────
     sim = cell.get("cafe_similarity_score")
     if pd.notna(sim):
@@ -257,7 +285,7 @@ with st.sidebar:
 
     map_mode = st.radio(
         "Harita",
-        ["Uygunluk puanı", "OSM noktaları", "Ham grid özelliği"],
+        ["Uygunluk puanı", "Kafe rekabeti (25 kare)", "OSM noktaları", "Ham grid özelliği"],
         index=0,
     )
 
@@ -360,6 +388,9 @@ Mahalle toplam nüfus: `data/raw/tuik/cankaya_mahalle_nufus.csv`
     grid_metric = "suitability_score"
     if map_mode == "Ham grid özelliği":
         GRID_METRIC_LABELS = {
+            "cafes_cell": "Kafe · merkez kare",
+            "cafes_9_cells": "Kafe · toplam 9 kare",
+            "cafes_25_cells": "Kafe · toplam 25 kare",
             "cafe_similarity_score": "Kafe Benzerliği (Random Forest)",
             "cafes_500m": "Kafe Sayısı (500 m)",
             "restaurants_500m": "Restoran Sayısı (500 m)",
@@ -444,6 +475,23 @@ else:
     features = _with_streets(str(grid_path), grid_path.stat().st_mtime)
     scored_all = score_grid(features, weights)
 
+    competition_cols = ["cafes_cell", "cafes_9_cells", "cafes_25_cells", "competition_level",
+                        "covered_cells_9", "covered_cells_25"]
+    if not set(competition_cols).issubset(scored_all.columns):
+        cafe_path = RAW_DIR / LAYER_FILES["cafes"]
+        if cafe_path.exists():
+            counts = _competition_counts(str(grid_path), grid_path.stat().st_mtime,
+                                         str(cafe_path), cafe_path.stat().st_mtime)
+            scored_all = scored_all.drop(columns=competition_cols, errors="ignore").merge(counts, on="cell_id")
+    competition_available = set(competition_cols).issubset(scored_all.columns)
+    if map_mode == "Kafe rekabeti (25 kare)" and not competition_available:
+        st.warning("Kafe koordinatları bu depoda yok. Kenar çubuğundaki ‘OSM verisini indir / yenile’ "
+                   "düğmesiyle veriyi alıp yeniden açın; 500 m toplamlarından 25 kare sayısı türetilemez.")
+        st.stop()
+    if map_mode == "Ham grid özelliği" and grid_metric in competition_cols and not competition_available:
+        st.warning("Bu sayılar için önce OSM kafe koordinatlarını indirin.")
+        st.stop()
+
     # RF café-similarity scores (cached — only recomputed when parquet changes)
     sim_grid, imp_df = _similarity_scores(str(grid_path), grid_path.stat().st_mtime)
     if "cafe_similarity_score" in sim_grid.columns:
@@ -505,13 +553,18 @@ else:
         selected_id = int(ranked.iloc[0]["cell_id"])
         st.session_state.selected_cell_id = selected_id
 
-    color_col = "suitability_score" if map_mode == "Uygunluk puanı" else grid_metric
+    color_col = ("competition_level" if map_mode == "Kafe rekabeti (25 kare)" else
+                 "suitability_score" if map_mode == "Uygunluk puanı" else grid_metric)
     invert = color_col == "metro_distance"
     with st.spinner("Uygunluk haritası hazırlanıyor…"):
         st.pydeck_chart(
             grid_deck(scored, color_col, invert=invert, selected_cell_id=selected_id),
             width="stretch",
         )
+    if map_mode == "Kafe rekabeti (25 kare)":
+        st.caption("Renkler aşılan eşik sayısını gösterir: gri 0, sarı 1, turuncu 2, kırmızı 3. "
+                   "Eşikler merkez ≥2, toplam 9 kare ≥6, toplam 25 kare ≥13. "
+                   "Gri alan otomatik olarak iyi konum değildir; bu katman uygunluk puanından ayrıdır.")
 
     st.caption(
         f"{len(scored)} hücre gösteriliyor · tavan {score_ceiling:.0f}/100 "
@@ -660,5 +713,6 @@ with st.expander("Sınırlılıklar"):
 - Analiz yarıçapı canlı değiştirilmez; özellikleri yeniden üretmek gerekir.
 - Şeffaf Ankara / ABB katmanı henüz yok; ulaşım OSM durak ve metroya dayanır.
 - İlk sürüm yalnızca Çankaya + kafe.
+- 25 karelik rekabet eşikleri kullanıcı varsayımıdır; satış veya kârlılık verisiyle kalibre edilmemiştir.
         """
     )
