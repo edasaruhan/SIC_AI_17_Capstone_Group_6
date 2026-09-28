@@ -10,6 +10,7 @@ from src.allocate_population import attach_population
 from src.attach_streets import attach_street_names
 from src.collect_neighbourhoods import run as collect_mahalle
 from src.collect_osm_data import LAYER_FILES, RAW_DIR
+from src.cafe_grid_competition import cafe_grid_competition
 from src.create_grid import PROCESSED_DIR, build_grid
 
 COUNT_SPECS = [
@@ -124,6 +125,11 @@ def build_features(grid: gpd.GeoDataFrame | None = None) -> gpd.GeoDataFrame:
     for column, filename, radius in COUNT_SPECS:
         print(f"counting {column}...")
         grid = count_in_radius(grid, _load_points(filename), radius, column)
+
+    cafe_path = RAW_DIR / LAYER_FILES["cafes"]
+    if cafe_path.exists():
+        print("counting cafés in nested grid neighbourhoods...")
+        grid = grid.merge(cafe_grid_competition(grid, _load_points(LAYER_FILES["cafes"])), on="cell_id")
 
     print("nearest metro...")
     grid = nearest_distance(grid, _load_points(LAYER_FILES["metro"]), "metro_distance")

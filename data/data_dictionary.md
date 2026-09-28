@@ -56,6 +56,11 @@ Population is allocated as `pop_total × (cell∩mahalle area / mahalle area)`.
 | Variable | Description | Expected effect |
 | --- | --- | --- |
 | cafes_500m | Cafés within 500 m | Saturation |
+| cafes_cell | Distinct mapped cafés inside the centre 300 m cell | Competition context |
+| cafes_9_cells | Distinct mapped cafés in the centre plus 8 surrounding cells | Competition context |
+| cafes_25_cells | Distinct mapped cafés in the 5×5 block | Competition context |
+| competition_level | Number of user-defined thresholds crossed (0–3): ≥2 / ≥6 / ≥13 | Separate warning layer, not MCDA |
+| covered_cells_9, covered_cells_25 | Cells inside Çankaya included in the 3×3 and 5×5 blocks | Boundary coverage warning |
 | restaurants_500m | Nearby restaurants | Positive (complementary) |
 | bus_stops_400m | Transit access | Positive |
 | metro_distance | Distance to nearest metro (m) | Negative as distance grows |
@@ -73,6 +78,8 @@ Population is allocated as `pop_total × (cell∩mahalle area / mahalle area)`.
 | street_name | Nearest named OSM walk way within 250 m (label only) | — |
 | population_source | `tuik_areal_weight_total_only` | — |
 
+The grid competition columns are added when the feature matrix is rebuilt with raw café coordinates. They are absent from the currently committed Parquet; the app can compute them from downloaded café GeoJSON instead. `cafes_500m` alone cannot reconstruct these counts.
+
 ## Suitability pillars (`src/scoring.py`)
 
 Default mix: demand 30%, access 25%, population 20%, complementary 15%, inverted saturation 10%. Stated prior, not fitted to profit. See README for rationale.
@@ -86,4 +93,3 @@ Default mix: demand 30%, access 25%, population 20%, complementary 15%, inverted
 | saturation_ratio | `cafes_500m / (demand_proxy + 1)` |
 | saturation_score | `1 - minmax(saturation_ratio)` |
 | suitability_score | Weighted sum × 100 |
-

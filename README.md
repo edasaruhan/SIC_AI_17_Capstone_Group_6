@@ -76,6 +76,16 @@ $$\text{Suitability Score} = 100 \times (0.30D + 0.25A + 0.20P + 0.15T + 0.10S)$
 
 ---
 
+## Café competition map (exploratory layer)
+
+The app has a separate **Kafe rekabeti (25 kare)** map. For each 300 m cell it counts distinct mapped cafés in the centre cell, the surrounding 3×3 block (9 cells total), and the 5×5 block (25 cells total, up to 1.5×1.5 km). A warning is added for each threshold crossed: centre **≥2**, 9 cells **≥6**, 25 cells **≥13**. Grey/yellow/orange/red means **0/1/2/3 warnings**; grey is not automatically a good location. Selecting a cell in the sidebar or top-10 table shows the three counts and warns when district-edge cells have fewer neighbours.
+
+These are user-defined preliminary competition thresholds, **not** coefficients fitted to sales or proof that existing cafés are successful. Café clustering can indicate activity and competition at the same time; demand and competition should be checked on site. This layer does **not** change the main MCDA score or the Random Forest model. Restaurants remain contextual/complementary features, not a second restaurant-site recommendation.
+
+The committed feature Parquet does not yet include the new grid counts, and raw café coordinates are not committed. To use the layer, click **OSM verisini indir / yenile** in the app (requires Overpass access), or run `python -m src.collect_osm_data` followed by `python -m src.build_features` and restart the app. Without café coordinates the app explicitly marks the competition layer unavailable rather than deriving counts from `cafes_500m`.
+
+---
+
 ## 🤖 Random Forest Café-Similarity Model (Week 4)
 
 To complement the deductive MCDA score with inductive machine learning, a secondary comparison model was developed:
@@ -96,24 +106,15 @@ To complement the deductive MCDA score with inductive machine learning, a second
 
 ## 🧪 Unit Testing Suite
 
-The repository includes a comprehensive `pytest` test suite verifying scoring mathematics, weight bounds, leakage prevention, spatial feature transforms, and machine learning outputs:
+The repository includes a `pytest` suite verifying scoring mathematics, weight bounds, leakage prevention, spatial features, competition counts, and machine learning outputs:
 
 ```bash
 pytest tests/ -v
 ```
 
-```text
-============================= test session starts =============================
-collected 28 items
-
-tests/test_cafe_similarity.py ...........                                [ 39%]
-tests/test_scoring.py .................                                  [100%]
-
-============================== 28 passed in 5.36s =============================
-```
-
 - `test_scoring.py`: Weight normalization, non-negativity clipping, 0–1 pillar range validation, post-rescaling ceiling checks, Top-N cell ranking, and Spearman sensitivity computations.
 - `test_cafe_similarity.py`: Feature matrix integrity, zero-leakage verification (`cafes_500m` absence), 0–100 probability calibration, spatial CV fold dimensions, and feature importance table formatting.
+- `test_cafe_grid_competition.py`: Nested unique café counts, threshold boundaries, and district-edge coverage.
 
 ---
 
@@ -179,6 +180,7 @@ SIC_AI_17_Capstone_Group_6/
 │   ├── attach_streets.py        # Spatial nearest-street labeling for cells
 │   ├── scoring.py               # 5-Pillar MCDA scoring, normalization, sensitivity analysis
 │   ├── cafe_similarity.py       # Random Forest similarity classifier (Spatial Group CV)
+│   ├── cafe_grid_competition.py # Nested 1/9/25-cell café competition warnings
 │   └── visualization.py         # PyDeck 2D/3D map renderers and tooltip builders
 ├── tests/
 │   ├── __init__.py
