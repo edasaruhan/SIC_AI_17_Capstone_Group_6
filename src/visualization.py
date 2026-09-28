@@ -184,6 +184,17 @@ def _suitability_colors(values: pd.Series) -> list[list[int]]:
     return colors
 
 
+def _competition_colors(values: pd.Series) -> list[list[int]]:
+    """Fixed categories: number of independent competition thresholds crossed."""
+    palette = {
+        0: [100, 116, 139, 85],   # no threshold crossed; not an endorsement
+        1: [234, 179, 8, 140],
+        2: [249, 115, 22, 170],
+        3: [220, 38, 38, 190],
+    }
+    return [palette[int(value)] for value in values]
+
+
 def _view_for_cell(grid_wgs: gpd.GeoDataFrame, cell_id: int | None) -> pdk.ViewState:
     if cell_id is None or grid_wgs.empty or "cell_id" not in grid_wgs.columns:
         return CANKAYA_VIEW
@@ -209,7 +220,9 @@ def grid_deck(
     series = pd.to_numeric(frame[value_col], errors="coerce")
     if invert:
         series = -series
-    if value_col == "suitability_score":
+    if value_col == "competition_level":
+        colors = _competition_colors(frame[value_col])
+    elif value_col == "suitability_score":
         colors = _suitability_colors(frame[value_col])
     else:
         colors = _color_ramp(series)
@@ -222,6 +235,10 @@ def grid_deck(
     if "street_name" not in frame.columns:
         frame["street_name"] = ""
     METRIC_LABEL_TR = {
+        "competition_level": "Rekabet uyarısı (0–3)",
+        "cafes_cell": "Merkez karede kafe",
+        "cafes_9_cells": "Toplam 9 karede kafe",
+        "cafes_25_cells": "Toplam 25 karede kafe",
         "suitability_score": "Uygunluk Puanı",
         "cafe_similarity_score": "Kafe Benzerliği (RF)",
         "cafes_500m": "Kafe Sayısı (500m)",
@@ -278,6 +295,11 @@ def grid_deck(
         "saturation_score_100",
         "cafe_similarity_score",
         "cafes_500m",
+        "cafes_cell",
+        "cafes_9_cells",
+        "cafes_25_cells",
+        "competition_level",
+        "covered_cells_25",
         "bus_stops_400m",
     ]
     keep = [c for c in keep_cols if c in frame.columns]
@@ -311,8 +333,15 @@ def grid_deck(
 
     extra_metric = (
         "<br/><b>Seçili Metrik:</b> {tooltip}"
-        if value_col not in ["suitability_score", "cafe_similarity_score"]
+        if value_col not in ["suitability_score", "cafe_similarity_score", "competition_level"]
         else ""
+    )
+    competition_html = (
+        "<br/><b>Kafe:</b> merkez {cafes_cell} · 9 kare {cafes_9_cells} · "
+        "25 kare {cafes_25_cells}"
+        "<br/><b>Rekabet uyarısı:</b> {competition_level}/3 · "
+        "kapsanan kare {covered_cells_25}/25"
+        if "competition_level" in frame.columns else ""
     )
     html = (
         "<b>{mahalle_name}</b><br/>{street_name}<br/>Hücre No: {cell_id}"
@@ -320,6 +349,7 @@ def grid_deck(
         "<b>Uygunluk Puanı:</b> {suitability_score}/100"
         "<br/><b>Kafe Benzerlik Skoru:</b> {cafe_similarity_score}/100"
         + extra_metric
+        + competition_html
         + "<hr style='margin: 4px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.25);'/>"
         "Talep: {demand_score_100}/100 · Ulaşım: {accessibility_score_100}/100"
         "<br/>Nüfus: {population_score_100}/100 · Tamamlayıcı: {complementary_score_100}/100"
@@ -331,4 +361,3 @@ def grid_deck(
         tooltip={"html": html, "style": {"color": "white"}},
         map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
     )
-
