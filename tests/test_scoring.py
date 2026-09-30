@@ -16,6 +16,7 @@ def _make_grid(n: int = 20, seed: int = 42) -> gpd.GeoDataFrame:
     df = gpd.GeoDataFrame(
         {
             "cell_id": range(n),
+            "competition_level": rng.integers(0, 4, n),
             "mahalle_name": [f"Mahalle_{i % 5}" for i in range(n)],
             "universities_1000m": rng.integers(0, 10, n),
             "shops_500m": rng.integers(0, 50, n),
