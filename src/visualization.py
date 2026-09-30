@@ -11,6 +11,9 @@ from src import WGS84_CRS
 CANKAYA_VIEW = pdk.ViewState(latitude=39.90, longitude=32.86, zoom=11, pitch=0)
 
 LAYER_STYLE = {
+    "office": {"color": [120, 100, 180, 210], "radius": 40, "label": "Ofis"},
+    "government": {"color": [80, 100, 170, 210], "radius": 50, "label": "Devlet dairesi"},
+    "kindergarten": {"color": [200, 110, 170, 210], "radius": 45, "label": "Kreş / anaokulu"},
     "cafe": {"color": [220, 50, 47, 210], "radius": 45, "label": "Kafe"},
     "restaurant": {"color": [230, 126, 34, 200], "radius": 40, "label": "Restoran / fast food"},
     "university": {"color": [142, 68, 173, 220], "radius": 80, "label": "Üniversite"},
@@ -236,6 +239,7 @@ def grid_deck(
         frame["street_name"] = ""
     METRIC_LABEL_TR = {
         "competition_level": "Rekabet uyarısı (0–3)",
+        "saturation_score_100": "Restoran doygunluğu /100",
         "cafes_cell": "Merkez karede kafe",
         "cafes_9_cells": "Toplam 9 karede kafe",
         "cafes_25_cells": "Toplam 25 karede kafe",
@@ -271,7 +275,8 @@ def grid_deck(
         "demand_score_100",
         "accessibility_score_100",
         "population_score_100",
-        "complementary_score_100",
+        "competition_score_100",
+        "competition_penalty", "saturation_penalty",
         "saturation_score_100",
     ]:
         if col in frame.columns:
@@ -291,7 +296,8 @@ def grid_deck(
         "demand_score_100",
         "accessibility_score_100",
         "population_score_100",
-        "complementary_score_100",
+        "competition_score_100",
+        "competition_penalty", "saturation_penalty",
         "saturation_score_100",
         "cafe_similarity_score",
         "cafes_500m",
@@ -352,8 +358,8 @@ def grid_deck(
         + competition_html
         + "<hr style='margin: 4px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.25);'/>"
         "Talep: {demand_score_100}/100 · Ulaşım: {accessibility_score_100}/100"
-        "<br/>Nüfus: {population_score_100}/100 · Tamamlayıcı: {complementary_score_100}/100"
-        "<br/>Fırsat: {saturation_score_100}/100"
+        "<br/>Nüfus: {population_score_100}/100 · Rekabet: {competition_score_100}/100"
+        "<br/>Doygunluk: {saturation_score_100}/100"
     )
     return pdk.Deck(
         initial_view_state=_view_for_cell(frame, selected_cell_id),
