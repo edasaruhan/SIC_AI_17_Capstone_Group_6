@@ -14,6 +14,9 @@ from src.cafe_grid_competition import cafe_grid_competition
 from src.create_grid import PROCESSED_DIR, build_grid
 
 COUNT_SPECS = [
+    ("offices_500m", LAYER_FILES["offices"], 500),
+    ("government_500m", LAYER_FILES["government"], 500),
+    ("kindergartens_500m", LAYER_FILES["kindergartens"], 500),
     ("cafes_500m", LAYER_FILES["cafes"], 500),
     ("restaurants_500m", LAYER_FILES["restaurants"], 500),
     ("bus_stops_400m", LAYER_FILES["bus_stops"], 400),
@@ -124,7 +127,16 @@ def build_features(grid: gpd.GeoDataFrame | None = None) -> gpd.GeoDataFrame:
 
     for column, filename, radius in COUNT_SPECS:
         print(f"counting {column}...")
-        grid = count_in_radius(grid, _load_points(filename), radius, column)
+        if not (RAW_DIR / filename).exists():
+            grid[column] = float("nan")
+        else:
+            points = _load_points(filename)
+            if column == "schools_750m" and "isced:level" in points:
+                # ISCED 2/3: middle/high school. Unknown levels remain visible as missing coverage.
+                levels = points["isced:level"].fillna("").astype(str)
+                grid["school_level_unknown_count"] = int((levels == "").sum())
+                points = points[levels.str.contains(r"(?:^|;)\s*[23]\s*(?:;|$)", regex=True)]
+            grid = count_in_radius(grid, points, radius, column)
 
     cafe_path = RAW_DIR / LAYER_FILES["cafes"]
     if cafe_path.exists():

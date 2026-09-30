@@ -27,11 +27,13 @@ OSM_TAGS = {
         "school",
         "hospital",
         "clinic",
+        "kindergarten",
     ],
     "leisure": ["park"],
     "highway": ["bus_stop"],
     "railway": ["station", "subway_entrance"],
     "shop": True,
+    "office": True,
 }
 
 KEEP_COLUMNS = [
@@ -40,6 +42,8 @@ KEEP_COLUMNS = [
     "highway",
     "railway",
     "shop",
+    "office",
+    "isced:level",
     "name",
     "category",
     "group",
@@ -47,6 +51,9 @@ KEEP_COLUMNS = [
 ]
 
 LAYER_FILES = {
+    "offices": "cankaya_offices.geojson",
+    "government": "cankaya_government.geojson",
+    "kindergartens": "cankaya_kindergartens.geojson",
     "cafes": "cankaya_cafes.geojson",
     "restaurants": "cankaya_restaurants.geojson",
     "universities": "cankaya_universities.geojson",
@@ -59,6 +66,9 @@ LAYER_FILES = {
 }
 
 CATEGORY_TO_LAYER = {
+    "office": "offices",
+    "government": "government",
+    "kindergarten": "kindergartens",
     "cafe": "cafes",
     "restaurant": "restaurants",
     "university": "universities",
@@ -95,6 +105,9 @@ def classify_pois(pois: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     category = category.mask(shop.ne("") & shop.ne("nan") & shop.ne("none"), "shop")
     category = category.mask(leisure.eq("park"), "park")
     category = category.mask(amenity.isin(["hospital", "clinic"]), "hospital")
+    category = category.mask(_norm_tag(out, "office").ne(""), "office")
+    category = category.mask(_norm_tag(out, "office").eq("government"), "government")
+    category = category.mask(amenity.eq("kindergarten"), "kindergarten")
     category = category.mask(amenity.eq("school"), "school")
     category = category.mask(amenity.eq("university"), "university")
     category = category.mask(amenity.isin(["restaurant", "fast_food"]), "restaurant")
@@ -106,6 +119,9 @@ def classify_pois(pois: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         {
             "cafe": "target_business",
             "restaurant": "target_business",
+            "office": "demand",
+            "government": "demand",
+            "kindergarten": "demand",
             "university": "demand",
             "school": "demand",
             "hospital": "demand",

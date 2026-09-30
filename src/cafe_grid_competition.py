@@ -1,7 +1,7 @@
 """Count distinct mapped cafés in nested 300 m grid neighbourhoods.
 
-These counts describe local competition; they are not a profit forecast and do
-not change the existing MCDA suitability score.
+These counts describe local competition; they are not a profit forecast and are used
+as a separate negative component in the v2 MCDA suitability score.
 """
 
 from __future__ import annotations
