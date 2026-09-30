@@ -98,7 +98,6 @@ st.markdown(
 )
 
 
-st.title("Miray ek güncellemelerle 2.0")
 st.caption(
     "Çankaya kafe konum karar desteği · Açıklanabilir 0–100 puan · Kârlılık tahmini değil"
 )
