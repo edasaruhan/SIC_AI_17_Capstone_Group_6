@@ -103,20 +103,26 @@ def count_within_cell(
     return out
 
 
-def poi_diversity(grid: gpd.GeoDataFrame) -> pd.Series:
-    flags = [
-        grid["cafes_500m"] > 0,
-        grid["restaurants_500m"] > 0,
-        grid["shops_500m"] > 0,
-        grid["parks_500m"] > 0,
-        grid["schools_750m"] > 0,
-        grid["universities_1000m"] > 0,
-        grid["hospitals_1000m"] > 0,
-        grid["bus_stops_400m"] > 0,
-        grid["metro_distance"].fillna(10_000) <= 1000,
-    ]
-    stacked = pd.concat(flags, axis=1)
-    return stacked.sum(axis=1).astype(int)
+def poi_diversity(grid: gpd.GeoDataFrame, include_cafes: bool = True) -> pd.Series:
+    """Count present POI types; model inputs must exclude the café target."""
+    def values(column):
+        return pd.to_numeric(grid.get(column, pd.Series(float("nan"), index=grid.index)), errors="coerce")
+
+    columns = ["restaurants_500m", "shops_500m", "parks_500m", "schools_750m",
+               "universities_1000m", "hospitals_1000m", "bus_stops_400m"]
+    if include_cafes:
+        columns.append("cafes_500m")
+    flags = [values(column) > 0 for column in columns]
+    flags.append(values("metro_distance").fillna(10_000) <= 1000)
+    return pd.concat(flags, axis=1).sum(axis=1).astype(int)
+
+
+def eligible_secondary_schools(points: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, int]:
+    """Keep explicit ISCED 2/3 tags; a missing column means all levels are unknown."""
+    levels = points.get("isced:level", pd.Series("", index=points.index)).fillna("").astype(str).str.strip()
+    unknown = int(levels.eq("").sum())
+    eligible = levels.str.contains(r"(?:^|;)\s*[23]\s*(?:;|$)", regex=True)
+    return points.loc[eligible].copy(), unknown
 
 
 def build_features(grid: gpd.GeoDataFrame | None = None) -> gpd.GeoDataFrame:
@@ -131,11 +137,9 @@ def build_features(grid: gpd.GeoDataFrame | None = None) -> gpd.GeoDataFrame:
             grid[column] = float("nan")
         else:
             points = _load_points(filename)
-            if column == "schools_750m" and "isced:level" in points:
-                # ISCED 2/3: middle/high school. Unknown levels remain visible as missing coverage.
-                levels = points["isced:level"].fillna("").astype(str)
-                grid["school_level_unknown_count"] = int((levels == "").sum())
-                points = points[levels.str.contains(r"(?:^|;)\s*[23]\s*(?:;|$)", regex=True)]
+            if column == "schools_750m":
+                points, unknown = eligible_secondary_schools(points)
+                grid["school_level_unknown_count"] = unknown
             grid = count_in_radius(grid, points, radius, column)
 
     cafe_path = RAW_DIR / LAYER_FILES["cafes"]

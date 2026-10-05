@@ -1,8 +1,8 @@
 """Explainable multi-criteria café suitability (not a profit model).
 
 Existing cafés are *not* treated as successful businesses. This module only
-combines demand, access, population, complementary activity and relative
-saturation into a 0–100 score a planner can inspect and re-weight.
+combines demand, access and population, minus restaurant saturation
+and café competition into a 0–100 score a planner can inspect and re-weight.
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ from sklearn.preprocessing import MinMaxScaler
 
 from src.create_grid import PROCESSED_DIR, ROOT
 
-# Default mix is a documented prior for a convenience café, not a fitted model.
-# See WEIGHT_RATIONALE and README. Sliders in the app re-normalise any mix.
+# User scenario weights, not fitted coefficients. Positive contributions alone
+# are normalized; penalty magnitudes are retained. See WEIGHT_RATIONALE.
 DEFAULT_WEIGHTS = {
     "demand_score": 0.45,
     "accessibility_score": 0.25,
@@ -185,7 +185,7 @@ def sensitivity_table(grid: gpd.GeoDataFrame, delta: float = 0.10, top_n: int = 
             shocked[key] = max(DEFAULT_WEIGHTS[key] + sign * delta, 0.0)
             alt = score_grid(grid, shocked)
             alt_top = set(top_cells(alt, n=top_n)["cell_id"])
-            overlap = len(base_top & alt_top) / top_n if top_n else 0.0
+            overlap = len(base_top & alt_top) / len(base_top) if base_top else 0.0
             merged = base[["cell_id", "suitability_score"]].merge(
                 alt[["cell_id", "suitability_score"]],
                 on="cell_id",
