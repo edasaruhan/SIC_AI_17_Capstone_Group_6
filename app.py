@@ -24,7 +24,6 @@ from src.scoring import (
     DEFAULT_WEIGHTS,
     PILLAR_LABELS,
     WEIGHT_RATIONALE,
-    normalize_weights,
     score_grid,
     sensitivity_table,
     top_cells,
@@ -158,8 +157,8 @@ def _with_streets(path_str: str, mtime: float) -> gpd.GeoDataFrame:
 
 
 @st.cache_data(show_spinner="Duyarlılık hesaplanıyor…")
-def _sensitivity(path_str: str, mtime: float) -> pd.DataFrame:
-    return sensitivity_table(_read_file(path_str))
+def _sensitivity(grid: pd.DataFrame) -> pd.DataFrame:
+    return sensitivity_table(grid)
 
 
 @st.cache_data(show_spinner="Kafe benzerlik modeli hesaplanıyor… (ilk açılışta ~30 sn)")
@@ -452,7 +451,8 @@ else:
         sim_grid, imp_df = _similarity_scores(str(grid_path), grid_path.stat().st_mtime)
     except ValueError as exc:
         st.warning(f"Benzerlik modeli hesaplanamadı; uygunluk analizi devam ediyor: {exc}")
-        sim_grid, imp_df = scored_all, pd.DataFrame()
+        sim_grid, imp_df = scored_all.drop(columns=["cafe_similarity_score", "cafe_similarity_raw"], errors="ignore"), pd.DataFrame()
+        scored_all = sim_grid.copy()
     if "cafe_similarity_score" in sim_grid.columns:
         if "cafe_similarity_score" in scored_all.columns:
             scored_all = scored_all.drop(columns=["cafe_similarity_score"])
@@ -542,7 +542,7 @@ else:
             "saturation_score_100",
         ]:
             if c in display.columns:
-                display[c] = pd.to_numeric(display[c], errors="coerce").fillna(0.0).round(1)
+                display[c] = pd.to_numeric(display[c], errors="coerce").round(1)
 
         if "metro_distance" in display.columns:
             display["metro_distance"] = (
@@ -606,7 +606,7 @@ else:
             "Her ağırlığı tek tek değiştiriyoruz; olumlu katkıları kendi toplamına oranlıyoruz, cezaları ayrıca çıkarıyoruz. "
             "Spearman, tüm hücre sıralamasının ne kadar durduğunu; top-50 örtüşmesi önerilen listenin ne kadar kaydığını gösterir."
         )
-        sens = _sensitivity(str(grid_path), grid_path.stat().st_mtime)
+        sens = _sensitivity(pd.DataFrame(scored_all.drop(columns="geometry")))
         show = sens.copy()
         show["pillar"] = show["pillar"].map(PILLAR_LABELS).fillna(show["pillar"])
         show = show.rename(

@@ -59,3 +59,53 @@ def test_home_and_analysis_open():
     mode.set_value('Kafe rekabeti (25 kare)').run()
     assert not app.exception
     assert any('koordinat' in item.value for item in app.warning)
+
+    mode.set_value('OSM noktaları').run()
+    assert not app.exception
+    assert any('Yerel OSM' in item.value for item in app.warning)
+    mode.set_value('Ham grid özelliği').run()
+    assert not app.exception
+    neighbourhood = next(item for item in app.multiselect if item.label == 'Mahalle')
+    neighbourhood.set_value(neighbourhood.options[:2]).run()
+    assert not app.exception
+    minimum = next(item for item in app.slider if item.label == 'Minimum uygunluk')
+    minimum.set_value(100).run()
+    assert not app.exception
+    assert any('Filtreye uyan hücre yok' in item.value for item in app.info)
+
+
+def test_schools_require_explicit_secondary_levels():
+    import geopandas as gpd
+    from shapely.geometry import Point
+    from src.build_features import eligible_secondary_schools
+    schools = gpd.GeoDataFrame({"isced:level": ["2", "3", "1;2", "1", None, " "]},
+                               geometry=[Point(i, 0) for i in range(6)], crs="EPSG:32636")
+    eligible, unknown = eligible_secondary_schools(schools)
+    assert eligible.index.tolist() == [0, 1, 2]
+    assert unknown == 2
+    eligible, unknown = eligible_secondary_schools(schools.drop(columns="isced:level"))
+    assert eligible.empty
+    assert unknown == 6
+
+
+def test_unavailable_model_does_not_show_legacy_similarity(monkeypatch):
+    import geopandas as gpd
+    import streamlit as st
+    from streamlit.testing.v1 import AppTest
+    original_read = gpd.read_parquet
+
+    def single_class_read(*args, **kwargs):
+        grid = original_read(*args, **kwargs)
+        grid["cafes_500m"] = 0
+        grid["cafe_similarity_score"] = 99.0
+        return grid
+
+    st.cache_data.clear()
+    monkeypatch.setattr(gpd, "read_parquet", single_class_read)
+    app = AppTest.from_file(Path(__file__).resolve().parents[1] / 'app.py', default_timeout=60).run()
+    app.radio[0].set_value('Analiz').run()
+    assert not app.exception
+    assert any('Benzerlik modeli hesaplanamadı' in item.value for item in app.warning)
+    assert not any(item.label == 'Benzerlik skoru' for item in app.metric)
+    assert 'Kafe Benzerlik Skoru /100' not in app.dataframe[0].value.columns
+    st.cache_data.clear()

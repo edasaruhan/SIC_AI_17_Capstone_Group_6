@@ -13,7 +13,7 @@ This project develops an explainable, data-driven geospatial decision-support sy
 
 - **Presence $\neq$ Profitability:** The presence of existing cafés in a cell does not imply that those businesses are profitable or well-run. Conversely, a cell without cafés is not inherently a poor location or an unexploited commercial opportunity.
 - **Dual-Layer Evaluation Framework:**
-  1. **Explainable Multi-Criteria Decision Analysis (MCDA):** A transparent, literature-grounded scoring engine based on the Huff (1964) retail gravity model, evaluating positive and negative spatial components (0–100 scale).
+  1. **Explainable Multi-Criteria Decision Analysis (MCDA):** A transparent scoring engine with user-selected scenario weights, combining demand, access and population with restaurant-saturation and café-competition penalties (0–100 scale). Huff/gravity concepts provide context; the code does not implement a Huff choice-probability model or validate its weights against commercial outcomes.
   2. **Café-Location Similarity Classifier (Random Forest):** A machine learning model trained using spatial cross-validation to answer: *"To what extent does this location resemble areas where cafés typically operate?"*
 
 ---
@@ -51,10 +51,10 @@ flowchart TD
 | Phase | Core Objective | Status |
 | :---: | :--- | :---: |
 | **Week 1** | OpenStreetMap data extraction pipeline and POI taxonomy for Çankaya | ✅ Complete |
-| **Week 2** | 300 m hexagonal/square grid generation and spatial buffer feature engineering | ✅ Complete |
+| **Week 2** | 300 m square grid generation and spatial buffer feature engineering | ✅ Complete |
 | **Week 3** | Weighted suitability scoring engine (MCDA), sensitivity analysis & UI explanation | ✅ Complete |
 | **Week 4** | Random Forest café-similarity model (with spatial group cross-validation) | ✅ Complete |
-| **Week 5** | Interactive PyDeck visualizer, dynamic filtering, 28-test unit suite, Docker & CI/CD | ✅ Complete |
+| **Week 5** | Interactive PyDeck visualizer, dynamic filtering, automated test suite, Docker & GitHub Actions CI | ✅ Complete |
 
 ---
 
@@ -86,16 +86,11 @@ The competition and restaurant-saturation maps show pressure, not profitability.
 To complement the deductive MCDA score with inductive machine learning, a secondary comparison model was developed:
 
 - **Objective:** Quantify how closely a cell's spatial attributes match typical café locations (`cafe_similarity_score`, 0–100).
-- **Target Formulation:** Binary label `cafes_500m >= 1`. *Existing café counts are explicitly excluded from feature columns to prevent target leakage.*
-- **Spatial Validation:** Standard K-Fold splits suffer from spatial autocorrelation leakage (neighboring cells sharing similar feature spaces). We employ **Stratified Group 5-Fold Cross-Validation** grouped on `mahalle_name`, ensuring entire neighborhoods are held out during testing.
-- **Model Performance:** **0.979 ROC-AUC** across 5 out-of-fold spatial splits.
-- **Gini Feature Importances:**
-  1. POI Diversity (30.2%)
-  2. Retail Shops within 500 m (15.4%)
-  3. Restaurants within 500 m (15.0%)
-  4. Subway Station Proximity (10.7%)
-  5. Parks within 500 m (8.4%)
-  6. Population Density (6.9%)
+- **Target Formulation:** Binary label `cafes_500m >= 1`. *Existing café counts are excluded. POI diversity is recomputed without cafés even when the stored legacy diversity includes them. Missing-value medians are fitted within each training fold.*
+- **Spatial Validation:** Standard K-Fold splits suffer from spatial autocorrelation leakage (neighboring cells sharing similar feature spaces). We employ **Stratified Group 5-Fold Cross-Validation** grouped on `mahalle_name`, ensuring entire neighborhoods are held out during testing. Nearby cells across neighborhood boundaries can still share buffers and spatial dependence; these folds do not eliminate all spatial leakage.
+- **Displayed Score:** 100 × out-of-fold probability. Predictions from a model fitted on all cells are not blended into the displayed score. The full-data model supplies descriptive Gini importances only; the score is not a calibrated business-success probability.
+- **Model Performance:** Mean spatial ROC-AUC **0.960** on the committed 5,361-cell dataset after the leakage correction. Run metadata, fold results and importances are in [model validation](docs/model_validation.md). Results may change with refreshed OSM data and dependency versions.
+- **Gini Feature Importances:** Café-free POI diversity 23.9%, restaurants 16.9%, shops 16.3%, metro distance 11.6%, parks 9.3%, population density 7.1% in that run. Importance does not establish causality.
 
 ---
 
@@ -107,9 +102,12 @@ The repository includes a `pytest` suite verifying scoring mathematics, weight b
 pytest tests/ -v
 ```
 
-- `test_scoring.py`: Weight normalization, non-negativity clipping, 0–1 pillar range validation, post-rescaling ceiling checks, Top-N cell ranking, and Spearman sensitivity computations.
-- `test_cafe_similarity.py`: Feature matrix integrity, zero-leakage verification (`cafes_500m` absence), 0–100 probability calibration, spatial CV fold dimensions, and feature importance table formatting.
+- `test_scoring.py`: Weight normalization, non-negativity clipping, 0–1 pillar range validation, positive-pillar rescaling, deterministic weight-driven ranking changes, Top-N cell ranking, and sensitivity computations. The normalization helper is tested separately; production scoring normalizes positive contributions only.
+- `test_cafe_similarity.py`: Feature matrix integrity, café-free feature invariance, training-fold imputation, held-out score construction, 0–100 score bounds, spatial CV fold dimensions, and feature importance table formatting.
 - `test_cafe_grid_competition.py`: Nested unique café counts, threshold boundaries, and district-edge coverage.
+- `test_v2.py`: Exact positive contributions and penalties, missing data, explicit ISCED school filtering, and Streamlit home/analysis flows.
+
+The suite currently contains 43 tests. Passing unit tests does not validate profitability or guarantee complete OSM coverage.
 
 ---
 
@@ -179,8 +177,10 @@ SIC_AI_17_Capstone_Group_6/
 │   └── visualization.py         # PyDeck 2D/3D map renderers and tooltip builders
 ├── tests/
 │   ├── __init__.py
-│   ├── test_scoring.py          # MCDA and scoring logic tests (17 tests)
-│   └── test_cafe_similarity.py  # Machine learning and leakage tests (11 tests)
+│   ├── test_scoring.py          # Scoring, weights, ranking and sensitivity
+│   ├── test_cafe_similarity.py  # Model and leakage regression tests
+│   ├── test_cafe_grid_competition.py # Counts, thresholds and edge coverage
+│   └── test_v2.py               # v2 formulas, school filter and app flows
 ├── app.py                       # Streamlit web application & decision dashboard
 ├── Dockerfile                   # Production container definition
 ├── requirements.txt             # Python package dependencies

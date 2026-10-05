@@ -111,3 +111,51 @@ class TestFeatureImportanceTable:
         result = feature_importance_table(imp)
         assert abs(result["Önem %"].sum() - 100.0) < 1.0
 
+
+
+def test_cafe_changes_cannot_change_model_features():
+    from src.build_features import poi_diversity
+    grid = _make_grid()
+    grid["poi_diversity"] = poi_diversity(grid)
+    before, _, _ = _prepare(grid)
+    grid["cafes_500m"] = 0
+    grid["poi_diversity"] = poi_diversity(grid)
+    after, _, _ = _prepare(grid)
+    assert before.equals(after)
+
+
+def test_missing_values_remain_until_training_fold():
+    grid = _make_grid()
+    grid.loc[0, "population"] = np.nan
+    X, _, _ = _prepare(grid)
+    assert np.isnan(X.loc[0, "population"])
+    out, _ = train_and_score(grid, n_estimators=10, n_splits=3)
+    assert out.cafe_similarity_score.notna().all()
+
+
+def test_single_class_and_missing_target_are_rejected():
+    grid = _make_grid()
+    grid["cafes_500m"] = 0
+    with pytest.raises(ValueError, match="hem kafe"):
+        train_and_score(grid, n_estimators=10, n_splits=3)
+    with pytest.raises(ValueError, match="hedef verisi eksik"):
+        _prepare(grid.drop(columns="cafes_500m"))
+
+
+def test_display_scores_are_held_out_predictions(monkeypatch):
+    import src.cafe_similarity as module
+
+    class FakeForest:
+        def __init__(self, **kwargs):
+            pass
+        def fit(self, X, y):
+            self.full = len(X) == 60
+            self.feature_importances_ = np.full(X.shape[1], 1 / X.shape[1])
+            return self
+        def predict_proba(self, X):
+            probability = 0.9 if self.full else 0.2
+            return np.tile([1 - probability, probability], (len(X), 1))
+
+    monkeypatch.setattr(module, "RandomForestClassifier", FakeForest)
+    out, _ = train_and_score(_make_grid(), n_splits=3)
+    assert (out.cafe_similarity_score == 20.0).all()
