@@ -1,5 +1,14 @@
+## Samsung Innovation Campus — AI in Marketing Capstone Projesi
+
+**Retail Location Intelligence · Grup 6**
+
+Kafe girişimcilerinin hedef müşteri çevresine erişim ve rekabet koşullarını karşılaştırarak aday bölgeleri daha hızlı seçmesini amaçlayan AI destekli pazar planlama aracı.
+
+Nüfus, çevredeki kurumlar ve ulaşım müşteri çevresine erişimin dolaylı göstergeleridir. Gerçek müşteri profili, yaya sayısı, kârlılık veya başarı ölçülmez.
+
+**Önerilen KPI:** Manuel harita incelemesine göre aday liste hazırlama süresi. Süre tasarrufu henüz ölçülmedi; pilotta aday kalitesiyle birlikte değerlendirilecek.
+
 ## Temel Kullanım
-Bu uygulama Çankaya’da kafe konumlarını karşılaştıran açıklanabilir bir karar destek sistemidir. Kârlılık veya başarı tahmini yapmaz.
 
 1. **Kapsam:** Çankaya ve kafe analizi kullanılır. Restoran seçeneği yakında.
 2. **Verileri Güncelle:** OSM verilerini indirip analiz özelliklerini yeniden üretin. İnternet bağlantısı gerekir.
