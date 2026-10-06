@@ -58,7 +58,7 @@ flowchart TD
 
 ---
 
-## Miray ek güncellemelerle 2.0
+## 2.0
 
 The app opens on **Temel Kullanım**, loaded from `docs/temel_kullanim.md`.
 Sidebar order: Temel Kullanım → Verileri Güncelle → Kapsam → Harita ve bölge → Puan Ağırlıkları → Min uygunluk → OSM Katmanları.
