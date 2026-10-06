@@ -1,9 +1,13 @@
 # Retail Location Intelligence
 
 ### Explainable café site selection in Çankaya, Ankara
-**AI in Marketing Capstone · Group 6**
+**Samsung Innovation Campus — AI in Marketing Capstone Project · Group 6**
 
-A map-based decision-support prototype that helps café entrepreneurs and retail analysts shortlist areas for field investigation.
+[English](README.md) · [Türkçe](README_TR.md)
+
+An AI-supported market planning tool that aims to help café entrepreneurs shortlist candidate areas faster by comparing access to their intended customer surroundings and competition.
+
+Population, nearby institutions and transport are indirect access indicators. The project does not observe customer preferences, segment membership or actual footfall.
 
 > **Purpose:** compare locations transparently. Scores do not predict revenue, profit or business success.
 
@@ -95,6 +99,8 @@ Optional tests: `python -m pip install pytest`, then `python -m pytest tests/ -v
 Optional Docker: `docker build -t retail-location-intelligence .`, then `docker run -p 8501:8501 retail-location-intelligence`.
 
 ## 8. Capstone Reports
+
+[Five-minute capstone presentation](docs/Capstone_Presentation.pptx) — English slides with Turkish speaker notes.
 
 | Assignment | English PDF |
 | --- | --- |

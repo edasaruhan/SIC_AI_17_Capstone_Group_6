@@ -33,7 +33,7 @@ from src.cafe_similarity import train_and_score, feature_importance_table
 from src.cafe_grid_competition import cafe_grid_competition
 
 
-st.set_page_config(page_title="Perakende Konum Zekası - Çankaya Kafe Karar Desteği", layout="wide")
+st.set_page_config(page_title="Retail Location Intelligence - AI Destekli Pazar Planlama", layout="wide")
 
 # ── Loading & Stale Styling: Ekran kararmasını engelle, dönen çember ekle ──
 st.markdown(
@@ -98,7 +98,7 @@ st.markdown(
 
 
 st.caption(
-    "Çankaya kafe konum karar desteği · Açıklanabilir 0–100 puan · Kârlılık tahmini değil"
+    "Samsung Innovation Campus — AI in Marketing Capstone Projesi · Grup 6"
 )
 
 
@@ -634,11 +634,13 @@ else:
 with st.expander("Bu çıktı neyi iddia etmez"):
     st.markdown(
         """
-Bu uygulama **veri temelli, açıklanabilir bir kafe konum karar destek sistemidir.**
+Bu uygulama **kafe girişimcilerinin hedef müşteri çevresine erişim ve rekabet koşullarını karşılaştırarak aday bölgeleri daha hızlı seçmesini amaçlayan AI destekli pazar planlama aracıdır.**
+
+Nüfus, çevredeki kurumlar ve ulaşım dolaylı göstergelerdir; müşteri tercihi veya gerçek yaya sayısını ölçmez. Süre tasarrufu henüz kullanıcı pilotuyla doğrulanmamıştır.
 
 - Hücrede kafe olması o işletmenin **basarili** oldugu anlamina gelmez.
 - Random Forest modeli **"mevcut kafe lokasyonlarina benzerlik"** ogrenir — karlılık degil.
-  Mahalle bazlı spatial cross-validation ile degerlendirmistir (spatial leakage onlenir).
+  Mahalle bazlı çapraz doğrulama kullanır; mahalle sınırlarında mekânsal bağımlılık kalabilir.
 - Ciro, gunluk musteri, kira, kapanma tarihi verisi yoktur.
 - MCDA ağırlıkları kullanıcı tarafından belirlenmiş senaryo tercihleridir; kaydırıp değiştirebilirsiniz.
         """
