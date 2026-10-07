@@ -62,7 +62,7 @@ class TestNormalizeWeights:
     def test_custom_sums_to_one(self):
         custom = {"demand_score": 0.5, "accessibility_score": 0.3,
                   "population_score": 0.1, "competition_score": 0.05,
-                  "saturation_score": 0.05}
+                  "similar_place_density_score": 0.05}
         w = normalize_weights(custom)
         assert abs(sum(w.values()) - 1.0) < 1e-9
 
@@ -133,7 +133,7 @@ class TestScoreGrid:
         pillars = pd.DataFrame({
             "cell_id": [0, 1], "demand_score": [1.0, 0.0],
             "accessibility_score": [0.0, 1.0], "population_score": [0.0, 0.0],
-            "saturation_score": [0.0, 0.0], "competition_score": [0.0, 0.0],
+            "similar_place_density_score": [0.0, 0.0], "competition_score": [0.0, 0.0],
         })
         demand_weights = {key: 0.0 for key in DEFAULT_WEIGHTS}
         demand_weights["demand_score"] = 1.0
@@ -181,3 +181,4 @@ class TestSensitivityTable:
 def test_small_grid_overlap_uses_available_cells():
     result = sensitivity_table(_make_grid(n=3), delta=0, top_n=50)
     assert (result.top50_overlap == 1.0).all()
+

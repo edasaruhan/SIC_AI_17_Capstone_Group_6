@@ -6,10 +6,10 @@ from tests.test_scoring import _make_grid
 
 
 def test_exact_ceiling_floor_and_penalties():
-    frame = pd.DataFrame({"demand_score": [1, 1, 1, 1, 0], "accessibility_score": [1, 1, 1, 1, 0], "population_score": [1, 1, 1, 1, 0], "saturation_score": [0, 0, 0, 1, 1], "competition_score": [0, 1/3, 2/3, 1, 1]})
+    frame = pd.DataFrame({"demand_score": [1, 1, 1, 1, 0], "accessibility_score": [1, 1, 1, 1, 0], "population_score": [1, 1, 1, 1, 0], "similar_place_density_score": [0, 0, 0, 1, 1], "competition_score": [0, 1/3, 2/3, 1, 1]})
     result = apply_weights(frame)
-    assert result.suitability_score.tolist() == [100, 97.7, 95.3, 90, 0]
-    assert np.allclose(result.competition_penalty[:4], [0, 7/3, 14/3, 7])
+    assert result.suitability_score.tolist() == [100, 98.3, 96.7, 95, 0]
+    assert np.allclose(result.competition_penalty[:4], [0, 5/3, 10/3, 5])
 
 
 def test_cafes_restaurants_do_not_raise_demand():
@@ -35,14 +35,14 @@ def test_popularity_has_no_effect():
     assert a.suitability_score.equals(b.suitability_score)
 
 
-def test_constant_restaurant_pressure_and_absence():
+def test_constant_cafe_density_and_absence():
     grid = _make_grid()
-    grid['restaurants_500m'] = 5
-    assert (build_pillars(grid).saturation_score == 1).all()
-    grid['restaurants_500m'] = 0
-    assert (build_pillars(grid).saturation_score == 0).all()
-    grid['restaurants_500m'] = float('nan')
-    assert build_pillars(grid).saturation_score.isna().all()
+    grid['cafes_500m'] = 5
+    assert (build_pillars(grid).similar_place_density_score == 1).all()
+    grid['cafes_500m'] = 0
+    assert (build_pillars(grid).similar_place_density_score == 0).all()
+    grid['cafes_500m'] = float('nan')
+    assert build_pillars(grid).similar_place_density_score.isna().all()
 
 
 def test_home_and_analysis_open():
@@ -54,7 +54,7 @@ def test_home_and_analysis_open():
     assert not app.exception
     assert any('geçici' in item.value for item in app.warning)
     mode = next(item for item in app.selectbox if item.label == 'Harita türü')
-    mode.set_value('Doygunluk').run()
+    mode.set_value('Benzer yer yoğunluğu').run()
     assert not app.exception
     mode.set_value('Kafe rekabeti (25 kare)').run()
     assert not app.exception
@@ -109,3 +109,4 @@ def test_unavailable_model_does_not_show_legacy_similarity(monkeypatch):
     assert not any(item.label == 'Benzerlik skoru' for item in app.metric)
     assert 'Kafe Benzerlik Skoru /100' not in app.dataframe[0].value.columns
     st.cache_data.clear()
+
