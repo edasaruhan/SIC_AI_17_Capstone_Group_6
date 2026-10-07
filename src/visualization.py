@@ -175,15 +175,18 @@ def _color_ramp(values: pd.Series) -> list[list[int]]:
 
 
 def _suitability_colors(values: pd.Series) -> list[list[int]]:
+    """Fixed 0–100 scale: pale green at 0, dark green at 100."""
     series = pd.to_numeric(values, errors="coerce").fillna(0).clip(0, 100)
+    stops = [[237, 248, 233], [186, 228, 179], [116, 196, 118],
+             [49, 163, 84], [0, 109, 44]]
     colors = []
     for score in series:
-        t = float(score) / 100.0
-        r = int(40 + 20 * (1 - t))
-        g = int(80 + 140 * t)
-        b = int(70 + 40 * (1 - t))
-        a = int(50 + 140 * t)
-        colors.append([r, g, b, a])
+        position = float(score) / 25.0
+        lower = min(int(position), len(stops) - 2)
+        fraction = position - lower
+        rgb = [round(a + (b - a) * fraction)
+               for a, b in zip(stops[lower], stops[lower + 1])]
+        colors.append([*rgb, 210])
     return colors
 
 
@@ -368,4 +371,3 @@ def grid_deck(
         tooltip={"html": html, "style": {"color": "white", "position": "absolute", "pointerEvents": "none", "marginLeft": "12px", "marginTop": "12px", "maxWidth": "340px", "fontSize": "12px"}},
         map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
     )
-
