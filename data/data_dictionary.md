@@ -64,7 +64,7 @@ Population is allocated as `pop_total × (cell∩mahalle area / mahalle area)`.
 | cafes_25_cells | Distinct mapped cafés in the 5×5 block | Competition context |
 | competition_level | Number of user-defined thresholds crossed (0–3): ≥2 / ≥6 / ≥13 | Warning layer and negative MCDA competition component |
 | covered_cells_9, covered_cells_25 | Cells inside Çankaya included in the 3×3 and 5×5 blocks | Boundary coverage warning |
-| restaurants_500m | Restaurants/fast food within 500 m | Negative saturation component |
+| restaurants_500m | Restaurants/fast food within 500 m | Context only; no saturation penalty |
 | bus_stops_400m | Transit access | Positive |
 | metro_distance | Distance to nearest metro (m) | Negative as distance grows |
 | universities_1000m | Universities nearby | Positive |
@@ -87,7 +87,7 @@ The grid competition columns are added when the feature matrix is rebuilt with r
 
 ## Suitability pillars (`src/scoring.py`)
 
-Default weights: demand 45%, access 25%, population 20%; restaurant saturation penalty 3%, café competition penalty 7%. User scenario preferences, not fitted to profit.
+Default weights: demand 45%, access 25%, population 20%; conditional similar-place density bonus up to 5 points, café competition penalty up to 5 points. User scenario preferences, not fitted to profit.
 
 | Column | Description |
 | --- | --- |
@@ -95,13 +95,14 @@ Default weights: demand 45%, access 25%, population 20%; restaurant saturation p
 | demand_missing_features | Missing demand layers; missing does not mean zero mapped venues |
 | accessibility_score | 0–1 mix: bus stops .45, inverse metro distance .35, intersections .20 |
 | population_score | Min–max population density, or population if density is absent |
-| saturation_score | Min–max restaurants_500m; constant zero = 0, constant positive = 1, missing = NaN |
+| similar_place_density_score | cafes_500m / district maximum; zero counts = 0, constant positive = 1, missing = NaN |
 | competition_score | competition_level / 3; missing = NaN |
 | positive_contribution | 100 × weighted positive pillars / their weight total |
-| saturation_penalty | 100 × saturation weight × saturation_score |
+| similar_place_density_bonus | 100 × density weight × density score if competition_score = 0; otherwise 0, unknown competition = NaN |
 | competition_penalty | 100 × competition weight × competition_score |
-| score_provisional | True if an enabled penalty cannot be computed |
-| suitability_score | Positive contribution minus penalties; clipped to 0–100 and rounded to one decimal |
+| score_provisional | True if enabled competition or an eligible density bonus cannot be computed |
+| suitability_score | Positive contribution plus eligible density bonus minus competition penalty; clipped to 0–100 and rounded to one decimal |
 | cafe_similarity_score | 0–100 held-out RF probability, recomputed by the app; stored legacy values use the former model and must not be treated as current validation |
 
-Positive pillars are rescaled across the district before UI filtering. Restaurant saturation is also scaled before filtering. Missing penalties are omitted from the numeric score and flagged as provisional. Popularity is disabled and has no effect. Missing ISCED columns exclude all schools from the refreshed secondary-school count; this differs from the disclosed generic-school legacy dataset.
+Positive pillars are rescaled across the district before UI filtering. Similar-place density is also scaled before filtering. Missing effects are omitted and flagged as provisional. Unknown competition never enables a density bonus. Popularity is disabled and has no effect. Missing ISCED columns exclude all schools from the refreshed secondary-school count; this differs from the disclosed generic-school legacy dataset.
+

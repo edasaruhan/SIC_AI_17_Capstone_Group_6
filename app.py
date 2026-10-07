@@ -57,6 +57,14 @@ st.markdown(
         transition: none !important;
     }
 
+    /* Tooltip coordinates are relative to the map container. */
+    [data-testid="stDeckGlJsonChart"] { position: relative; }
+    [data-testid="stDeckGlJsonChart"] .deckgl-tooltip,
+    [data-testid="stDeckGlJsonChart"] .deck-tooltip {
+        pointer-events: none !important;
+        max-width: min(340px, 80vw);
+    }
+
     /* 2. Sağ üstteki Streamlit yüklenme ibresini görünür tut */
     [data-testid="stStatusWidget"] {
         visibility: visible !important;
@@ -131,7 +139,7 @@ PILLAR_HELP = {
     "demand_score": "Üniversite, alışveriş, okul, park, ofis, devlet dairesi ve kreş. Kafe/restoran hariç.",
     "accessibility_score": "Durak sayısı, metroya yakınlık ve yol kesişimleri.",
     "population_score": "Mahalle nüfusunun hücreye alan payıyla dağıtımı.",
-    "saturation_score": "500 metrede restoran ve fast food; yüksek değer daha fazla ceza.",
+    "similar_place_density_score": "500 m içindeki kafe sayısı, tüm Çankaya maksimumuna oranlanır. Rekabet eşiği aşılmadığında en fazla +5 puan.",
     "competition_score": "Kafe eşikleri: merkez ≥2, 9 kare ≥6, 25 kare ≥13; her eşik cezanın üçte biri.",
 }
 ALL_MAHALLE = "Tüm Çankaya"
@@ -206,11 +214,13 @@ def _render_explanation(cell: pd.Series) -> None:
         }
     )
     st.bar_chart(pillars.set_index("Bileşen"))
-    st.caption("Rekabet ve doygunluk yüksekse ceza artar; diğer bileşenler olumlu katkıdır.")
+    st.caption("Rekabet eşiği aşılmadığında yoğunluk bonusu eklenir; aşıldığında bonus kapanır ve rekabet cezası uygulanır.")
     st.write(f"Olumlu katkı: {cell['positive_contribution']:.2f} puan")
-    for label, key in (("Rekabet cezası", "competition_penalty"), ("Doygunluk cezası", "saturation_penalty")):
+    for label, key in (("Rekabet cezası", "competition_penalty"),):
         value = cell.get(key)
         st.write(f"{label}: −{value:.2f} puan" if pd.notna(value) else f"{label}: veri yok — puan geçici")
+    bonus = cell.get("similar_place_density_bonus")
+    st.write(f"Benzer yer yoğunluğu katkısı: +{bonus:.2f} puan" if pd.notna(bonus) else "Benzer yer yoğunluğu katkısı: veri yok — puan geçici")
     st.caption("Popülerlik–mekân uyumluluğu: veri yok; %10 planlanan ağırlık hesaplamaya kapalı.")
 
     # ── Ham metrikler ──────────────────────────────────────────────────────
@@ -298,7 +308,7 @@ with st.sidebar:
     region_controls = st.container()
     with region_controls:
         st.subheader("Harita ve bölge")
-        map_mode = st.selectbox("Harita türü", ["Uygunluk puanı", "Kafe rekabeti (25 kare)", "Doygunluk", "OSM noktaları", "Ham grid özelliği"])
+        map_mode = st.selectbox("Harita türü", ["Uygunluk puanı", "Kafe rekabeti (25 kare)", "Benzer yer yoğunluğu", "OSM noktaları", "Ham grid özelliği"])
         # Use lightweight stored features; no RF training on the home page.
         control_path = _feature_grid_path()
         control_grid = _read_file(str(control_path)) if control_path else None
@@ -309,7 +319,7 @@ with st.sidebar:
         if map_mode == "Ham grid özelliği":
             grid_metric = st.selectbox("Hücre rengi", ["cafes_500m", "restaurants_500m", "population", "bus_stops_400m", "metro_distance"])
     st.subheader("Puan Ağırlıkları")
-    st.caption("Olumlu katkılar kendi toplamına oranlanır; ceza ağırlıkları puandan çıkarılır.")
+    st.caption("Temel katkılar kendi toplamına oranlanır. Yoğunluk bonusu ve rekabet cezası ayrı uygulanır.")
     if st.button("Varsayılan ağırlıklara dön"):
         for key, default in DEFAULT_WEIGHTS.items():
             st.session_state[f"w_{key}"] = float(default)
@@ -430,7 +440,7 @@ else:
     competition_available = set(competition_cols).issubset(scored_all.columns)
     scored_all = score_grid(scored_all, weights)
     if scored_all["score_provisional"].any():
-        st.warning("Rekabet veya doygunluk verisi eksik: eksik ceza uygulanmadı; uygunluk puanları geçicidir. Verileri Güncelle bölümünü kullanın.")
+        st.warning("Rekabet veya benzer yer yoğunluğu verisi eksik: doğrulanamayan bonus/ceza uygulanmadı; uygunluk puanları geçicidir. Verileri Güncelle bölümünü kullanın.")
     missing = scored_all["demand_missing_features"].iloc[0]
     if missing:
         st.warning(f"Eksik talep katmanları: {missing}. Talep yalnızca mevcut göstergelerle hesaplanır; verileri güncelleyin.")
@@ -509,7 +519,7 @@ else:
         st.session_state.selected_cell_id = selected_id
 
     color_col = ("competition_level" if map_mode == "Kafe rekabeti (25 kare)" else
-                 "saturation_score_100" if map_mode == "Doygunluk" else
+                 "similar_place_density_score_100" if map_mode == "Benzer yer yoğunluğu" else
                  "suitability_score" if map_mode == "Uygunluk puanı" else grid_metric)
     invert = color_col == "metro_distance"
     with st.spinner("Uygunluk haritası hazırlanıyor…"):
@@ -523,8 +533,10 @@ else:
                    "Gri alan otomatik olarak iyi konum değildir; bu eşikler uygunluk puanına rekabet cezası olarak yansır.")
 
     st.caption(f"{len(scored)} hücre · gözlenen en yüksek puan {score_ceiling:.1f}/100 · teorik üst sınır 100. Sarı çerçeve seçilen hücredir.")
-    if map_mode == "Doygunluk":
-        st.caption("Restoran/fast food sayısı 500 metrede ölçülür; tüm Çankaya üzerinden ölçeklenir. Mahalle filtresi ölçeği değiştirmez.")
+    if map_mode == "Uygunluk puanı":
+        st.caption("Yeşil ölçek: 0 puan açık yeşil, 100 puan koyu yeşil. Her hücre kendi uygunluk puanına göre tonlanır; mahalle filtresi renk ölçeğini değiştirmez.")
+    if map_mode == "Benzer yer yoğunluğu":
+        st.caption("Kafe sayısı 500 metrede ölçülür ve tüm Çankaya maksimumuna oranlanır. Rekabet eşiği aşılmadığında en fazla +5 puan ekler. Mahalle filtresi ölçeği değiştirmez.")
 
     left, right = st.columns((1.15, 1.0))
     with left:
@@ -539,7 +551,7 @@ else:
             "accessibility_score_100",
             "population_score_100",
             "competition_score_100",
-            "saturation_score_100",
+            "similar_place_density_score_100",
         ]:
             if c in display.columns:
                 display[c] = pd.to_numeric(display[c], errors="coerce").round(1)
@@ -565,9 +577,9 @@ else:
                 "population_score_100": "Nüfus /100",
                 "competition_score_100": "Rekabet /100",
                 "competition_penalty": "Rekabet cezası",
-                "saturation_penalty": "Doygunluk cezası",
+                "similar_place_density_bonus": "Yoğunluk bonusu",
                 "score_provisional": "Geçici puan",
-                "saturation_score_100": "Doygunluk /100",
+                "similar_place_density_score_100": "Benzer yer yoğunluğu /100",
                 "cafes_500m": "Kafe (500m)",
                 "bus_stops_400m": "Durak (400m)",
                 "metro_distance": "Metro Mesafesi (m)",

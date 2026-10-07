@@ -28,6 +28,18 @@ The Streamlit dashboard combines two separate perspectives:
 
 Users can select neighborhoods, adjust weights, compare locations on 2D/3D maps and inspect score contributions.
 
+**Market–user–location approach:** The product connects the market context (demand generators, population and similar businesses), the user (a café entrepreneur and their intended customer surroundings), and location (300 m cells, neighborhoods and access). It supports location-focused marketing decisions without tracking individual customers.
+
+### Connection to United Nations goals
+
+| Goal | Intended project connection |
+| --- | --- |
+| [SDG 3: Good Health and Well-being](https://sdgs.un.org/goals/goal3) | Indirectly support accessible social places through park and pedestrian-access indicators. Health outcomes have not been measured. |
+| [SDG 8: Decent Work and Economic Growth](https://sdgs.un.org/goals/goal8) | Help entrepreneurs assess market conditions and competition to inform local business planning. Employment growth and job quality have not been measured. |
+| [SDG 11: Sustainable Cities and Communities](https://sdgs.un.org/goals/goal11) | Make public transport, parks and neighborhood access visible in site selection. Safety and resilience are outside the current scoring model. |
+
+These are design intentions, not demonstrated sustainability outcomes.
+
 ## 3. Data and Workflow
 
 **Sources:** OpenStreetMap places and street networks, plus a neighborhood population CSV labeled TÜİK ADNKS 2025.
@@ -45,7 +57,7 @@ flowchart TD
 
 ## 4. Scoring and AI
 
-**Suitability:** demand 45%, access 25% and population 20% form the positive contribution. Restaurant saturation deducts up to 3 points; café competition deducts up to 7 points. Positive weights normalize within their own total; the final score is clipped to 0–100.
+**Suitability:** demand 45%, access 25% and population 20% form the positive contribution. Similar-place density is the café count within 500 m divided by the district-wide maximum. With no competition threshold crossed, it adds up to 5 points. Once a threshold is crossed, the bonus is disabled and each threshold deducts 5/3 points, up to 5 total. Missing competition data disables the bonus and makes the score provisional. Positive weights normalize within their own total; the final score is clipped to 0–100.
 
 Weights are user-selected scenarios, not coefficients learned from commercial outcomes. Popularity compatibility is planned and currently disabled.
 
@@ -116,4 +128,5 @@ Assignments 1/3 and 2/5 have the same supplied scope. Reports document implement
 [User guide (Turkish)](docs/temel_kullanim.md) · [Data dictionary](data/data_dictionary.md)
 
 **License:** [MIT](LICENSE). Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), ODbL.
+
 
