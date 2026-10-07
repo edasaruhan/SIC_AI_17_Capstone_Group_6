@@ -533,6 +533,8 @@ else:
                    "Gri alan otomatik olarak iyi konum değildir; bu eşikler uygunluk puanına rekabet cezası olarak yansır.")
 
     st.caption(f"{len(scored)} hücre · gözlenen en yüksek puan {score_ceiling:.1f}/100 · teorik üst sınır 100. Sarı çerçeve seçilen hücredir.")
+    if map_mode == "Uygunluk puanı":
+        st.caption("Yeşil ölçek: 0 puan açık yeşil, 100 puan koyu yeşil. Her hücre kendi uygunluk puanına göre tonlanır; mahalle filtresi renk ölçeğini değiştirmez.")
     if map_mode == "Benzer yer yoğunluğu":
         st.caption("Kafe sayısı 500 metrede ölçülür ve tüm Çankaya maksimumuna oranlanır. Rekabet eşiği aşılmadığında en fazla +5 puan ekler. Mahalle filtresi ölçeği değiştirmez.")
 
@@ -683,4 +685,3 @@ with st.expander("Sınırlılıklar"):
 - 25 karelik rekabet eşikleri kullanıcı varsayımıdır; satış veya kârlılık verisiyle kalibre edilmemiştir.
         """
     )
-
