@@ -28,6 +28,18 @@ Streamlit paneli iki ayrı bakış açısı sunar:
 
 Kullanıcı mahalle seçebilir, ağırlıkları değiştirebilir, 2D/3D haritalarda konumları karşılaştırabilir ve puan katkılarını inceleyebilir.
 
+**Market–user–konum yaklaşımı:** Pazar çevresi (talep oluşturan kurumlar, nüfus ve benzer işletmeler), kullanıcı (aday bölge seçen kafe girişimcisi ve ulaşmak istediği müşteri çevresi) ve konum (300 m hücreler, mahalle ve erişim) birlikte değerlendirilir. Ürün konum odaklı pazarlama karar desteğidir; bireysel müşteri takibi yapmaz.
+
+### Birleşmiş Milletler hedefleriyle bağlantı
+
+| Hedef | Projenin amaçladığı bağlantı |
+| --- | --- |
+| [Hedef 3: Sağlık ve Kaliteli Yaşam](https://sdgs.un.org/goals/goal3) | Her yaşta sağlıklı yaşamı ve refahı destekleme amacıyla, park ve yaya erişimi göstergelerini kullanarak erişilebilir sosyal mekân planlamasına dolaylı katkı. Sağlık etkisi ölçülmedi. |
+| [Hedef 8: İnsana Yakışır İş ve Ekonomik Büyüme](https://sdgs.un.org/goals/goal8) | Sürdürülebilir, kapsayıcı ekonomik büyüme ve verimli istihdam amacıyla, girişimcilerin pazar ve rekabeti daha bilinçli değerlendirmesine destek. İstihdam artışı veya iş kalitesi ölçülmedi. |
+| [Hedef 11: Sürdürülebilir Şehirler ve Topluluklar](https://sdgs.un.org/goals/goal11) | Kapsayıcı, güvenli, dayanıklı ve sürdürülebilir yerleşimler amacıyla, toplu taşıma, park ve mahalle erişimini konum kararlarında görünür kılma. Güvenlik ve dayanıklılık bu sürümde ölçülmez. |
+
+Bu bağlantılar tasarım amaçlarıdır; doğrulanmış sürdürülebilirlik sonuçları değildir.
+
 ## 3. Veri ve İş Akışı
 
 **Kaynaklar:** OpenStreetMap yer ve yol ağı verileri ile TÜİK ADNKS 2025 etiketli mahalle nüfus CSV’si.
@@ -45,7 +57,7 @@ flowchart TD
 
 ## 4. Puanlama ve Yapay Zekâ
 
-**Uygunluk:** Talep %45, erişim %25 ve nüfus %20 olumlu katkıyı oluşturur. Restoran doygunluğu en fazla 3, kafe rekabeti en fazla 7 puan düşürür. Olumlu ağırlıklar kendi toplamlarına bölünür; sonuç 0–100 aralığında tutulur.
+**Uygunluk:** Talep %45, erişim %25 ve nüfus %20 olumlu katkıyı oluşturur. Benzer yer yoğunluğu, 500 m içindeki kafe sayısının tüm Çankaya maksimumuna oranıdır. Rekabet eşiği aşılmadığında en fazla +5 puan ekler. Eşik aşılırsa bonus kapanır; her eşik 5/3 puan, toplam en fazla 5 puan düşürür. Eksik rekabet verisinde bonus verilmez ve puan geçicidir. Olumlu ağırlıklar kendi toplamlarına bölünür; sonuç 0–100 aralığında tutulur.
 
 Ağırlıklar kullanıcı senaryolarıdır, ticari sonuçlardan öğrenilmiş katsayılar değildir. Popülerlik uyumu planlıdır ve şu an kapalıdır.
 
@@ -116,3 +128,4 @@ python -m streamlit run app.py
 [Kullanım rehberi](docs/temel_kullanim.md) · [Veri sözlüğü](data/data_dictionary.md)
 
 **Lisans:** [MIT](LICENSE). Harita verisi © [OpenStreetMap katkıcıları](https://www.openstreetmap.org/copyright), ODbL.
+
