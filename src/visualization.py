@@ -152,7 +152,7 @@ def osm_deck(
     return pdk.Deck(
         initial_view_state=CANKAYA_VIEW,
         layers=deck_layers,
-        tooltip={"html": "<b>{label}</b>", "style": {"color": "white"}},
+        tooltip={"html": "<b>{label}</b>", "style": {"color": "white", "position": "absolute", "pointerEvents": "none", "marginLeft": "12px", "marginTop": "12px", "maxWidth": "340px", "fontSize": "12px"}},
         map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
     )
 
@@ -239,7 +239,7 @@ def grid_deck(
         frame["street_name"] = ""
     METRIC_LABEL_TR = {
         "competition_level": "Rekabet uyarısı (0–3)",
-        "saturation_score_100": "Restoran doygunluğu /100",
+        "similar_place_density_score_100": "Benzer yer yoğunluğu /100",
         "cafes_cell": "Merkez karede kafe",
         "cafes_9_cells": "Toplam 9 karede kafe",
         "cafes_25_cells": "Toplam 25 karede kafe",
@@ -276,8 +276,8 @@ def grid_deck(
         "accessibility_score_100",
         "population_score_100",
         "competition_score_100",
-        "competition_penalty", "saturation_penalty",
-        "saturation_score_100",
+        "competition_penalty", "similar_place_density_bonus",
+        "similar_place_density_score_100",
     ]:
         if col in frame.columns:
             frame[col] = pd.to_numeric(frame[col], errors="coerce").fillna(0.0).round(1)
@@ -297,8 +297,8 @@ def grid_deck(
         "accessibility_score_100",
         "population_score_100",
         "competition_score_100",
-        "competition_penalty", "saturation_penalty",
-        "saturation_score_100",
+        "competition_penalty", "similar_place_density_bonus",
+        "similar_place_density_score_100",
         "cafe_similarity_score",
         "cafes_500m",
         "cafes_cell",
@@ -359,11 +359,13 @@ def grid_deck(
         + "<hr style='margin: 4px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.25);'/>"
         "Talep: {demand_score_100}/100 · Ulaşım: {accessibility_score_100}/100"
         "<br/>Nüfus: {population_score_100}/100 · Rekabet: {competition_score_100}/100"
-        "<br/>Doygunluk: {saturation_score_100}/100"
+        "<br/>Benzer yer yoğunluğu: {similar_place_density_score_100}/100"
+        "<br/>Yoğunluk katkısı: +{similar_place_density_bonus} · Rekabet: −{competition_penalty}"
     )
     return pdk.Deck(
         initial_view_state=_view_for_cell(frame, selected_cell_id),
         layers=layers,
-        tooltip={"html": html, "style": {"color": "white"}},
+        tooltip={"html": html, "style": {"color": "white", "position": "absolute", "pointerEvents": "none", "marginLeft": "12px", "marginTop": "12px", "maxWidth": "340px", "fontSize": "12px"}},
         map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
     )
+

@@ -1,7 +1,7 @@
 """Explainable multi-criteria café suitability (not a profit model).
 
 Existing cafés are *not* treated as successful businesses. This module only
-combines demand, access and population, minus restaurant saturation
+combines demand, access and population with conditional café clustering
 and café competition into a 0–100 score a planner can inspect and re-weight.
 """
 
@@ -20,22 +20,23 @@ DEFAULT_WEIGHTS = {
     "demand_score": 0.45,
     "accessibility_score": 0.25,
     "population_score": 0.20,
-    "saturation_score": 0.03,
-    "competition_score": 0.07,
+    "similar_place_density_score": 0.05,
+    "competition_score": 0.05,
 }
 PILLAR_LABELS = {
     "demand_score": "Potansiyel talep (+)",
     "accessibility_score": "Ulaşım ve yaya erişimi (+)",
     "population_score": "Nüfus yoğunluğu (+)",
-    "saturation_score": "Restoran / fast food doygunluğu (−)",
+    "similar_place_density_score": "Çevrede benzer yer yoğunluğu (+)",
     "competition_score": "Aynı tür işletme rekabeti (−)",
 }
 POSITIVE_KEYS = ("demand_score", "accessibility_score", "population_score")
 WEIGHT_RATIONALE = """
 Ağırlıklar kullanıcı tarafından belirlenmiş senaryo tercihleridir; kârlılıktan öğrenilmedi.
-Talep %45, erişim %25, nüfus %20; restoran/fast food cezası en fazla 3,
-kafe rekabet cezası en fazla 7 puandır. Olumlu katkılar toplamlarına bölünerek
-100 ölçeğine taşınır, cezalar daha sonra çıkarılır ve sonuç en az 0 olur.
+Talep %45, erişim %25, nüfus %20 temel katkıyı oluşturur.
+500 m içindeki kafe yoğunluğu rekabet eşiği aşılmadığında en fazla +5 puan ekler.
+Rekabet eşiği aşılırsa bonus kapanır; her eşik 5/3, toplam en fazla 5 puan düşürür.
+Temel katkılar kendi toplamına bölünür; sonuç 0–100 aralığında tutulur.
 Popülerlik–mekân uyumluluğu %10 olarak planlanmıştır; bağımsız veri yoktur,
 hesaplamaya katılmaz. Eski literatür gerekçesi bu yeni ağırlıkları doğrulamaz.
 """
@@ -108,10 +109,11 @@ def build_pillars(grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     )
     out["population_score"] = scaled["population_density" if "population_density" in scaled else "population"]
     out = _minmax(out, list(POSITIVE_KEYS))
-    # Constant positive counts must not become zero pressure after MinMax.
-    restaurants = pd.to_numeric(out.get("restaurants_500m", pd.Series(float("nan"), index=out.index)), errors="coerce").clip(lower=0)
-    lo, hi = restaurants.min(), restaurants.max()
-    out["saturation_score"] = ((restaurants - lo) / (hi - lo) if hi > lo else restaurants.where(restaurants.isna(), float(hi > 0)))
+    # Café counts are an observable clustering proxy, not measured demand.
+    cafes = pd.to_numeric(out.get("cafes_500m", pd.Series(float("nan"), index=out.index)), errors="coerce").replace([np.inf, -np.inf], np.nan).clip(lower=0)
+    # Max scaling preserves zero = no mapped cafés, even for constant counts.
+    maximum = cafes.max()
+    out["similar_place_density_score"] = cafes / maximum if maximum > 0 else cafes.where(cafes.isna(), 0.0)
     level = pd.to_numeric(out.get("competition_level", pd.Series(float("nan"), index=out.index)), errors="coerce")
     out["competition_score"] = level.clip(0, 3) / 3.0
     out["popularity_score"] = float("nan")
@@ -129,11 +131,14 @@ def apply_weights(grid: gpd.GeoDataFrame, weights: dict[str, float] | None = Non
     positive_total = sum(raw[k] for k in POSITIVE_KEYS)
     positive = sum((raw[k] * out[k] for k in POSITIVE_KEYS), pd.Series(0.0, index=out.index))
     out["positive_contribution"] = 100 * positive / positive_total if positive_total else 0.0
-    for key, name in (("saturation_score", "saturation_penalty"), ("competition_score", "competition_penalty")):
-        out[name] = 100 * raw[key] * out[key]
-    out["score_provisional"] = ((out["saturation_score"].isna() & (raw["saturation_score"] > 0)) | (out["competition_score"].isna() & (raw["competition_score"] > 0)))
+    competition = out["competition_score"]
+    density = out["similar_place_density_score"]
+    # Missing competition cannot establish eligibility for a positive bonus.
+    out["similar_place_density_bonus"] = (100 * raw["similar_place_density_score"] * density).where(competition.eq(0), 0.0).mask(competition.isna())
+    out["competition_penalty"] = 100 * raw["competition_score"] * competition
+    out["score_provisional"] = ((competition.isna() & (raw["competition_score"] > 0 or raw["similar_place_density_score"] > 0)) | (competition.eq(0) & density.isna() & (raw["similar_place_density_score"] > 0)))
     out["suitability_score"] = (
-        out["positive_contribution"] - out["saturation_penalty"].fillna(0) - out["competition_penalty"].fillna(0)
+        out["positive_contribution"] + out["similar_place_density_bonus"].fillna(0) - out["competition_penalty"].fillna(0)
     ).clip(0, 100).round(1)
     for col in PILLAR_LABELS:
         out[f"{col}_100"] = (100 * out[col]).clip(0, 100).round(1)
@@ -157,8 +162,8 @@ def top_cells(grid: gpd.GeoDataFrame, n: int = 10) -> pd.DataFrame:
         "accessibility_score_100",
         "population_score_100",
         "competition_score_100",
-        "competition_penalty", "saturation_penalty", "score_provisional",
-        "saturation_score_100",
+        "competition_penalty", "similar_place_density_bonus", "score_provisional",
+        "similar_place_density_score_100",
         "cafe_similarity_score",
         "cafes_500m",
         "bus_stops_400m",
